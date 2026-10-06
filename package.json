@@ -1,0 +1,26 @@
+{
+  "name": "seattle-parking",
+  "version": "1.0.0",
+  "description": "Ask Siri or ChatGPT about Seattle street parking: rules where you are and the nearest place you can park.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stewartadam/seattle-parking.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stewartadam/seattle-parking/issues"
+  },
+  "homepage": "https://github.com/stewartadam/seattle-parking#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.5"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  }
+}
