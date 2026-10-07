@@ -102,6 +102,10 @@ test('findParking returns legal spots sorted by distance and respects filters', 
   assert.match(result.speech, /^The closest spot is/);
   assert.match(result.results[0].mapsUrl, /^https:\/\/maps\.apple\.com\/\?daddr=/);
 
+  // Both sides of 14th Ave E qualify; the street should be spoken once.
+  assert.equal(result.speech.split('14th Avenue East between East Republican Street and East Mercer Street').length - 1, 1);
+  assert.match(result.speech, /east side, .*; west side, /);
+
   const long = await findParking({ lat: 47.6239, lon: -122.3145, minMinutes: 240, date, fetchImpl: fakeFetch });
   assert.ok(long.results.every((r) => r.timeLimitMinutes == null || r.timeLimitMinutes >= 240));
 });

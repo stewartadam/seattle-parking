@@ -324,11 +324,25 @@ export async function findParking({
         `${blockfaces.length ? ' that matches' : ''}. Try a wider search or a parking garage.`,
     );
   } else {
-    results.forEach((r, i) => {
-      const where = r.direction ? `${formatDistance(r.distanceMeters)} ${r.direction}` : 'right here';
-      const side = r.side ? `, ${r.side} side` : '';
+    // Results are sorted by distance, so both sides of one block are usually
+    // adjacent; speak them as one sentence instead of repeating the street.
+    const groups = [];
+    for (const r of results) {
+      const last = groups.at(-1);
+      if (last && last[0].street === r.street) last.push(r);
+      else groups.push([r]);
+    }
+    groups.forEach((group, i) => {
+      const [first] = group;
+      const where = first.direction ? `${formatDistance(first.distanceMeters)} ${first.direction}` : 'right here';
       const lead = i === 0 ? 'The closest spot is' : i === 1 ? 'Next is' : 'Or';
-      speech.push(`${lead} ${where}, on ${r.street}${side}: ${r.summary}.`);
+      if (group.length === 1) {
+        const side = first.side ? `, ${first.side} side` : '';
+        speech.push(`${lead} ${where}, on ${first.street}${side}: ${first.summary}.`);
+      } else {
+        const sides = group.map((r) => `${r.side ? `${r.side} side` : 'one side'}, ${r.summary}`).join('; ');
+        speech.push(`${lead} ${where}, on ${first.street}: ${sides}.`);
+      }
     });
   }
 
