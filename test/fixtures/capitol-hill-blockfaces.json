@@ -1,0 +1,1236 @@
+{
+"features": [
+{
+"attributes": {
+"UNITDESC": "14TH AVE E BETWEEN E REPUBLICAN ST AND E MERCER ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 16,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314600575297,
+47.6231449777763
+],
+[
+-122.31458329918,
+47.6242200820635
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "14TH AVE E BETWEEN E REPUBLICAN ST AND E MERCER ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "Unrestricted Parking",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 14,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314706000081,
+47.6231457512195
+],
+[
+-122.314688726142,
+47.6242208555226
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E MERCER ST BETWEEN 14TH AVE E AND MALDEN AVE E",
+"SIDE": "S",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 8,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314583192257,
+47.6242228695268
+],
+[
+-122.31366893957,
+47.6242183526453
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E MERCER ST BETWEEN 13TH AVE E AND 14TH AVE E",
+"SIDE": "S",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 8,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315633523039,
+47.6242248935615
+],
+[
+-122.314692101768,
+47.6242232288228
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E MERCER ST BETWEEN 14TH AVE E AND MALDEN AVE E",
+"SIDE": "N",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 8,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314582422089,
+47.6242941461314
+],
+[
+-122.313668169479,
+47.6242896292265
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "14TH AVE E BETWEEN E MERCER ST AND E ROY ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 14,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314582111308,
+47.6242939801509
+],
+[
+-122.314567092013,
+47.6252413428305
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "14TH AVE E BETWEEN E MERCER ST AND E ROY ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 11,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314687539468,
+47.6242947437018
+],
+[
+-122.314672522119,
+47.6252421072946
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E MERCER ST BETWEEN 13TH AVE E AND 14TH AVE E",
+"SIDE": "N",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315633248036,
+47.6242961718397
+],
+[
+-122.314691825474,
+47.6242945070987
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "MALDEN AVE E BETWEEN E REPUBLICAN ST AND E MERCER ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 15,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313682844873,
+47.623138552576
+],
+[
+-122.313665214438,
+47.6242184721635
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "MALDEN AVE E BETWEEN E REPUBLICAN ST AND E MERCER ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313577419787,
+47.6231377664947
+],
+[
+-122.313559787164,
+47.624217686066
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "MALDEN AVE E BETWEEN E MERCER ST AND E ROY ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 2,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313664051197,
+47.6242896809901
+],
+[
+-122.313648874428,
+47.6252312087539
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E MERCER ST BETWEEN MALDEN AVE E AND 15TH S AVE E",
+"SIDE": "S",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": null,
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 5,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313559573365,
+47.624217841779
+],
+[
+-122.312659848395,
+47.6242139006176
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E MERCER ST BETWEEN MALDEN AVE E AND 15TH S AVE E",
+"SIDE": "N",
+"PARKING_CATEGORY": "Unrestricted Parking",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": null,
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 7,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313558890967,
+47.6242891190162
+],
+[
+-122.312659164764,
+47.6242851778494
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "MALDEN AVE E BETWEEN E MERCER ST AND E ROY ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 14,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313558622704,
+47.6242889039014
+],
+[
+-122.313543445383,
+47.6252304325332
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E REPUBLICAN ST BETWEEN 14TH AVE E AND MALDEN AVE E",
+"SIDE": "N",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 1,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314600732129,
+47.6231450647959
+],
+[
+-122.313686776026,
+47.6231385680158
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E REPUBLICAN ST BETWEEN 13TH AVE E AND 14TH AVE E",
+"SIDE": "N",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315651812032,
+47.6231461700296
+],
+[
+-122.314710368895,
+47.6231454820505
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "13TH AVE E BETWEEN E REPUBLICAN ST AND E MERCER ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315651110282,
+47.6231457788454
+],
+[
+-122.315633770005,
+47.624224641155
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E REPUBLICAN ST BETWEEN 14TH AVE E AND MALDEN AVE E",
+"SIDE": "S",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 9,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314601840293,
+47.6230737900869
+],
+[
+-122.313687885441,
+47.6230672933156
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "14TH AVE E BETWEEN E HARRISON ST AND E REPUBLICAN ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 16,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314619140219,
+47.6219896885113
+],
+[
+-122.314601761965,
+47.6230710859988
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E REPUBLICAN ST BETWEEN 13TH AVE E AND 14TH AVE E",
+"SIDE": "S",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 8,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315651925979,
+47.6230748911476
+],
+[
+-122.314710484132,
+47.6230742031695
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "14TH AVE E BETWEEN E HARRISON ST AND E REPUBLICAN ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 15,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314724562687,
+47.6219904628365
+],
+[
+-122.314707186625,
+47.6230718603401
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "13TH AVE E BETWEEN E REPUBLICAN ST AND E MERCER ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 13,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315756536464,
+47.6231465530968
+],
+[
+-122.315739197043,
+47.6242254154398
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "13TH AVE E BETWEEN E MERCER ST AND E ROY ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315632619023,
+47.6242958120937
+],
+[
+-122.315620099705,
+47.6250655455568
+],
+[
+-122.315675140721,
+47.6252029646758
+],
+[
+-122.315691467375,
+47.6253039367612
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E MERCER ST BETWEEN 12TH AVE E AND 13TH AVE E",
+"SIDE": "S",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": null,
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.316684317569,
+47.6242265087352
+],
+[
+-122.315742613737,
+47.6242250722711
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "13TH AVE E BETWEEN E MERCER ST AND E ROY ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 15,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315738046487,
+47.6242965962715
+],
+[
+-122.315725689002,
+47.6250564509104
+],
+[
+-122.315779058444,
+47.6251896969014
+],
+[
+-122.315796278534,
+47.6252961908
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E MERCER ST BETWEEN 12TH AVE E AND 13TH AVE E",
+"SIDE": "N",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": null,
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.316684079946,
+47.6242977874471
+],
+[
+-122.315742374823,
+47.624296350981
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E REPUBLICAN ST BETWEEN MALDEN AVE E AND 15TH S AVE E",
+"SIDE": "N",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313578066678,
+47.6231381476097
+],
+[
+-122.31268354202,
+47.623137814123
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "MALDEN AVE E BETWEEN E HARRISON ST AND E REPUBLICAN ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 15,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313701560489,
+47.6219869546368
+],
+[
+-122.313684049164,
+47.6230646264108
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E REPUBLICAN ST BETWEEN MALDEN AVE E AND 15TH S AVE E",
+"SIDE": "S",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 5,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313578123584,
+47.623066868609
+],
+[
+-122.312683601482,
+47.6230665351055
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "MALDEN AVE E BETWEEN E HARRISON ST AND E REPUBLICAN ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.313596137838,
+47.62198617217
+],
+[
+-122.313578624304,
+47.6230638430284
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "13TH AVE E BETWEEN E HARRISON ST AND E REPUBLICAN ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 0,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315669538905,
+47.6219953505397
+],
+[
+-122.315652253614,
+47.623074574718
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E REPUBLICAN ST BETWEEN 12TH AVE E AND 13TH AVE E",
+"SIDE": "N",
+"PARKING_CATEGORY": "No Parking Allowed",
+"PARKING_TIME_LIMIT": null,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 1,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.316701962957,
+47.6231496373268
+],
+[
+-122.315760685114,
+47.6231464028039
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "13TH AVE E BETWEEN E HARRISON ST AND E REPUBLICAN ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 15,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.315774961349,
+47.6219961220936
+],
+[
+-122.315757678245,
+47.6230753462879
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E REPUBLICAN ST BETWEEN 12TH AVE E AND 13TH AVE E",
+"SIDE": "S",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 1,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.316702498632,
+47.6230783592258
+],
+[
+-122.315761220748,
+47.6230751247247
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "15TH AVE E BETWEEN E REPUBLICAN N ST AND E MERCER S ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "Paid Parking",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": "15th Avenue E",
+"PARKING_SPACES": 9,
+"START_TIME_WKD": "08AM",
+"END_TIME_WKD": "08PM",
+"START_TIME_SAT": "08AM",
+"END_TIME_SAT": "08PM",
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.312716543516,
+47.623264393824
+],
+[
+-122.312701270264,
+47.6241788363754
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "15TH AVE E BETWEEN E MERCER S ST AND E MERCER N ST",
+"SIDE": "W",
+"PARKING_CATEGORY": "Time Limited Parking",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": null,
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 2,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.312678856537,
+47.6242855705223
+],
+[
+-122.312675587989,
+47.6244080111861
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "15TH AVE E BETWEEN E REPUBLICAN N ST AND E MERCER S ST",
+"SIDE": "E",
+"PARKING_CATEGORY": "Paid Parking",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": "15th Avenue E",
+"PARKING_SPACES": 9,
+"START_TIME_WKD": "08AM",
+"END_TIME_WKD": "08PM",
+"START_TIME_SAT": "08AM",
+"END_TIME_SAT": "08PM",
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.312553848529,
+47.6232932725084
+],
+[
+-122.312538572383,
+47.624207714138
+]
+]
+]
+}
+},
+{
+"attributes": {
+"UNITDESC": "E ROY ST BETWEEN 14TH AVE E AND MALDEN AVE E",
+"SIDE": "S",
+"PARKING_CATEGORY": "Restricted Parking Zone",
+"PARKING_TIME_LIMIT": 120,
+"RPZ_ZONE": "4",
+"PEAK_HOUR": null,
+"PAIDAREA": null,
+"PARKING_SPACES": 9,
+"START_TIME_WKD": null,
+"END_TIME_WKD": null,
+"START_TIME_SAT": null,
+"END_TIME_SAT": null,
+"START_TIME_SUN": null,
+"END_TIME_SUN": null
+},
+"geometry": {
+"paths": [
+[
+[
+-122.314567296991,
+47.6252412978816
+],
+[
+-122.313652852659,
+47.6252339952621
+]
+]
+]
+}
+}
+]
+}
