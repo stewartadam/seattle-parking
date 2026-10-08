@@ -1,0 +1,35 @@
+# XcodeGen spec. Generate the Xcode project with:
+#   brew install xcodegen && cd ios && xcodegen generate
+name: SeattleParking
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    # Set your Apple developer team ID here, or pick the team in Xcode's
+    # Signing & Capabilities tab after generating.
+    DEVELOPMENT_TEAM: ""
+targets:
+  SeattleParking:
+    type: application
+    platform: iOS
+    sources:
+      - SeattleParking
+    info:
+      path: SeattleParking/Info.plist
+      properties:
+        CFBundleDisplayName: Seattle Parking
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSLocationWhenInUseUsageDescription: >-
+          Seattle Parking uses your location to look up the parking rules on
+          the street you're on and the nearest places you can park.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.seattleparking
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
