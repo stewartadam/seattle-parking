@@ -13,7 +13,7 @@ It's a small Node server that looks up the City of Seattle's live SDOT parking d
 | **ChatGPT** (voice or text) | A custom GPT Action (`/openapi.json`) or an MCP connector (`/mcp`) | You say where you are ("I'm at Broadway and Pine") |
 | **Claude / any MCP client** | MCP over Streamable HTTP at `/mcp` | Address or coordinates |
 
-Setup guides: [Siri Shortcut](docs/siri-shortcut.md) · [ChatGPT](docs/chatgpt.md)
+Setup guides: [Siri Shortcut](docs/siri-shortcut.md) · [ChatGPT](docs/chatgpt.md) · [iPhone app with Siri App Intents](ios/README.md)
 
 ## Data
 
