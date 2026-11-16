@@ -2,7 +2,7 @@
 #   brew install xcodegen && cd ios && xcodegen generate
 name: SeattleParking
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: com.github.stewartadam
   deploymentTarget:
     iOS: "18.0"
 settings:
@@ -30,6 +30,6 @@ targets:
           the street you're on and the nearest places you can park.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.seattleparking
+        PRODUCT_BUNDLE_IDENTIFIER: com.github.stewartadam.seattleparking
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"

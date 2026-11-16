@@ -23,7 +23,7 @@ xcodegen generate
 open SeattleParking.xcodeproj
 ```
 
-1. In Xcode, select the **SeattleParking** target, then go to **Signing & Capabilities**. Pick your team, and change the bundle ID from `com.example.seattleparking` to one of your own.
+1. In Xcode, select the **SeattleParking** target, then go to **Signing & Capabilities**. Pick your team. The bundle ID is `com.github.stewartadam.seattleparking`; change it if you build under a different account.
 2. Plug in your iPhone, select it as the run destination, and press Run. If you haven't enabled Developer Mode on the phone, enable it under Settings › Privacy & Security.
 3. In the app, enter your server URL (for example `https://parking.example.com`) and your API key. The app has no default server. Add your RPZ permit zone if you have one. Tap **Allow location access** and choose **While Using the App**.
 4. Tap **Find parking** in the app to check that everything works, then try Siri.
