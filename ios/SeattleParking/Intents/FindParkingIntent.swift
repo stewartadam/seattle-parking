@@ -35,12 +35,11 @@ struct FindParkingIntent: AppIntent {
         SpotStore.shared.save(answer.results)
 
         try await requestConfirmation(
-            result: .result(
-                dialog: IntentDialog("\(answer.speech) Want walking directions to the closest one?"),
-                view: SpotsSnippet(spots: answer.results)
-            ),
-            confirmationActionName: .go
-        )
+            actionName: .go,
+            dialog: IntentDialog("\(answer.speech) Want walking directions to the closest one?")
+        ) {
+            SpotsSnippet(spots: answer.results)
+        }
         return .result(opensIntent: OpenURLIntent(mapsURL))
     }
 }
