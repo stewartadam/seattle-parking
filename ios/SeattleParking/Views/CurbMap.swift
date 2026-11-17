@@ -187,8 +187,9 @@ final class AreaCurbs {
             for b in blockfaces where bounds.intersects(b.path) {
                 guard seen.insert(b.id).inserted else { continue }
                 let line = CurbLine.offset(b.path, side: b.side, meters: shift)
-                let kind = CurbLine.kind(canParkNow: b.canParkNow, freeNow: b.freeNow,
-                                         timeLimitMinutes: b.timeLimitMinutes, stayingMinutes: staying)
+                let kind = CurbLine.kind(canParkNow: b.canParkNow, freeNow: b.freeNow, timeLimitMinutes: b.timeLimitMinutes,
+                                         postedLimitMinutes: b.postedLimitMinutes, restrictionInMinutes: b.restrictionInMinutes,
+                                         stayingMinutes: staying)
                 lines[kind, default: []].append(line)
             }
         }
@@ -250,32 +251,53 @@ extension MKCoordinateRegion {
 enum CurbLine {
     /// What a block side means for you right now.
     enum Kind: Int, CaseIterable {
-        case noParking, timeLimited, paid, free
+        // Drawing order: later kinds draw on top.
+        case noParking, restricted, okForNow, free
 
         var color: UIColor {
             switch self {
             case .noParking: .systemRed
-            case .timeLimited: .systemYellow
-            case .paid: .systemOrange
+            case .restricted: .systemYellow
+            case .okForNow: UIColor(red: 0.71, green: 0.90, blue: 0.11, alpha: 1) // chartreuse
             case .free: .systemGreen
             }
         }
         var label: String {
             switch self {
             case .noParking: "No parking"
-            case .timeLimited: "Time limit"
-            case .paid: "Paid"
-            case .free: "Free"
+            case .restricted: "Limited / paid"
+            case .okForNow: "OK for now"
+            case .free: "No limit"
             }
         }
     }
 
-    /// Red: can't park now. Yellow: time-limited, unless you chose how long
-    /// you're staying and the limit allows it. Orange: paid. Green: free.
-    static func kind(canParkNow: Bool, freeNow: Bool, timeLimitMinutes: Int?, stayingMinutes: Int?) -> Kind {
+    /// How far ahead an upcoming restriction counts when no stay is chosen.
+    static let restrictionHorizonMinutes = 12 * 60
+
+    /// - Red: can't park now.
+    /// - Yellow: paid now, or a time limit (or a restriction starting) that
+    ///   doesn't cover the chosen stay. With "Any time", any limit counts.
+    /// - Green-yellow: free now, and either a time limit that covers the
+    ///   chosen stay or a restriction that starts later.
+    /// - Green: free now, no limit, nothing starting soon.
+    static func kind(canParkNow: Bool, freeNow: Bool, timeLimitMinutes: Int?, postedLimitMinutes: Int?,
+                     restrictionInMinutes: Int?, stayingMinutes staying: Int?) -> Kind {
         if !canParkNow { return .noParking }
-        if let limit = timeLimitMinutes, !(stayingMinutes.map { limit >= $0 } ?? false) { return .timeLimited }
-        return freeNow ? .free : .paid
+        if !freeNow { return .restricted }
+        var posted = postedLimitMinutes
+        // Older servers only send the combined limit: treat it as posted.
+        if posted == nil, restrictionInMinutes == nil { posted = timeLimitMinutes }
+        if let posted {
+            guard let staying, posted >= staying else { return .restricted }
+            if let starts = restrictionInMinutes, starts < staying { return .restricted }
+            return .okForNow
+        }
+        if let starts = restrictionInMinutes {
+            if let staying, starts < staying { return .restricted }
+            if starts <= restrictionHorizonMinutes { return .okForNow }
+        }
+        return .free
     }
 
     /// Camera distance limits (meters above the map): the widest view is about
@@ -568,13 +590,14 @@ struct CurbLegend: View {
         .font(.caption2)
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Street colors: green free, orange paid, yellow time limit, red no parking")
+        .accessibilityLabel("Street colors: green no limit, light green OK for now, yellow limited or paid, red no parking")
     }
 }
 
 extension Spot {
     func kind(stayingMinutes: Int?) -> CurbLine.Kind {
-        CurbLine.kind(canParkNow: true, freeNow: freeNow, timeLimitMinutes: timeLimitMinutes, stayingMinutes: stayingMinutes)
+        CurbLine.kind(canParkNow: true, freeNow: freeNow, timeLimitMinutes: timeLimitMinutes, postedLimitMinutes: postedLimitMinutes,
+                      restrictionInMinutes: restrictionInMinutes, stayingMinutes: stayingMinutes)
     }
 }
 
@@ -605,7 +628,8 @@ struct HereMap: View {
             guard let path = b.path, path.count >= 2 else { return nil }
             return HighlightCurb(coordinates: CurbLine.offset(path, side: b.side, meters: shift),
                                  color: CurbLine.kind(canParkNow: b.canParkNow, freeNow: b.freeNow ?? true,
-                                                      timeLimitMinutes: b.timeLimitMinutes, stayingMinutes: nil).color,
+                                                      timeLimitMinutes: b.timeLimitMinutes, postedLimitMinutes: b.postedLimitMinutes,
+                                                      restrictionInMinutes: b.restrictionInMinutes, stayingMinutes: nil).color,
                                  width: 5)
         }
         CurbMapView(

@@ -49,6 +49,10 @@ struct Blockface: Decodable, Hashable {
     let canParkNow: Bool
     let freeNow: Bool?
     let timeLimitMinutes: Int?
+    /// Newer servers: a posted limit in effect now / minutes until a
+    /// restriction starts (while free now).
+    let postedLimitMinutes: Int?
+    let restrictionInMinutes: Int?
     let distanceMeters: Int?
     /// The curb line for this side of the block (newer servers only).
     let path: [Coordinate]?
@@ -73,6 +77,10 @@ struct Spot: Decodable, Hashable {
     let freeNow: Bool
     let ratePerHour: Double?
     let timeLimitMinutes: Int?
+    /// Newer servers: a posted limit in effect now / minutes until a
+    /// restriction starts (while free now).
+    let postedLimitMinutes: Int?
+    let restrictionInMinutes: Int?
     let distanceMeters: Int
     let direction: String?
     let point: Coordinate
@@ -95,6 +103,10 @@ struct AreaBlockface: Decodable, Hashable {
     let freeNow: Bool
     /// nil when there's no limit (or an older server that doesn't say).
     let timeLimitMinutes: Int?
+    /// Newer servers: a posted limit in effect now / minutes until a
+    /// restriction starts (while free now).
+    let postedLimitMinutes: Int?
+    let restrictionInMinutes: Int?
     let path: [Coordinate]
 }
 
