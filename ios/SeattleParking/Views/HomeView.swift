@@ -26,7 +26,7 @@ struct HomeView: View {
                     setupSection
                 }
             }
-            .navigationTitle("Seattle Parking")
+            // No title: the app's name is obvious on its own home screen.
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }

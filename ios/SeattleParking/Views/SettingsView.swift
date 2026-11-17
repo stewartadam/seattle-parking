@@ -75,6 +75,10 @@ struct SettingsView: View {
                 } footer: {
                     Text("Seattle Parking uses your location to look up the street you're on. If Siri says it can't get your location, set Location to Always.")
                 }
+
+                Section {} footer: {
+                    Text("Seattle Parking is not affiliated with or endorsed by the City of Seattle. It uses the city's public parking data, which can be incomplete; always check the posted signs.")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
