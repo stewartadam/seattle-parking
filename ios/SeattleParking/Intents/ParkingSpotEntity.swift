@@ -30,7 +30,7 @@ struct ParkingSpotEntity: AppEntity {
 
     init(rank: Int, spot: Spot) {
         id = rank
-        street = spot.street
+        street = spot.displayStreet
         summary = spot.summary
         mapsURL = spot.drivingDirectionsURL
     }

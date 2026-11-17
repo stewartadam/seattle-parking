@@ -35,7 +35,7 @@ struct SpotRow: View {
                 .frame(width: 28, height: 28)
                 .background(Circle().fill(Color((kind ?? spot.kind(filters: CurbFilters())).color).opacity(0.3)))
             VStack(alignment: .leading, spacing: 2) {
-                Text(spot.street).font(.subheadline.bold())
+                Text(spot.displayStreet).font(.subheadline.bold())
                 Text(spot.summary).font(.subheadline)
                 Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
             }

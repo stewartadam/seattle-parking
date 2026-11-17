@@ -57,7 +57,7 @@ struct SpotsSnippet: View {
                         .frame(width: 24, height: 24)
                         .background(Circle().fill(Color(spot.kind(filters: CurbFilters(stayingMinutes: minutes)).color).opacity(0.3)))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(spot.street).font(.subheadline.bold()).lineLimit(2)
+                        Text(spot.displayStreet).font(.subheadline.bold()).lineLimit(2)
                         Text(spot.summary).font(.subheadline)
                         Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
                     }

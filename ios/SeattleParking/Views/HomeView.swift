@@ -115,7 +115,7 @@ struct HomeView: View {
     }
 
     private var hereTitle: String {
-        if case .loaded(let answer) = here, let street = answer.blockfaces.first?.street { return street }
+        if case .loaded(let answer) = here, let street = answer.blockfaces.first?.displayStreet { return street }
         return "Right here"
     }
 

@@ -44,6 +44,8 @@ struct Coordinate: Decodable, Hashable {
 
 struct Blockface: Decodable, Hashable {
     let street: String
+    /// Short display form, e.g. "E. Lynn St between Yale Ave E and Eastlake Ave E" (newer servers).
+    let streetLabel: String?
     let side: String?
     let summary: String
     let canParkNow: Bool
@@ -72,6 +74,8 @@ struct HereResponse: Decodable {
 
 struct Spot: Decodable, Hashable {
     let street: String
+    /// Short display form, e.g. "E. Lynn St between Yale Ave E and Eastlake Ave E" (newer servers).
+    let streetLabel: String?
     let side: String?
     let summary: String
     let freeNow: Bool
@@ -97,6 +101,8 @@ struct NearbyResponse: Decodable {
 /// One side of one block, for coloring a map (/api/area).
 struct AreaBlockface: Decodable, Hashable {
     let street: String
+    /// Short display form, e.g. "E. Lynn St between Yale Ave E and Eastlake Ave E" (newer servers).
+    let streetLabel: String?
     let side: String?
     let summary: String
     let canParkNow: Bool
@@ -175,3 +181,6 @@ struct ParkingAPI {
         return try JSONDecoder().decode(T.self, from: data)
     }
 }
+
+extension Blockface { var displayStreet: String { streetLabel ?? street } }
+extension Spot { var displayStreet: String { streetLabel ?? street } }

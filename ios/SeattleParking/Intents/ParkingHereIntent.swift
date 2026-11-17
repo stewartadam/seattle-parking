@@ -22,7 +22,7 @@ struct HereSnippet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let street = answer.blockfaces.first?.street {
+            if let street = answer.blockfaces.first?.displayStreet {
                 Text(street).font(.headline)
             }
             ForEach(answer.blockfaces, id: \.self) { b in
