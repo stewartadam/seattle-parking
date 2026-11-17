@@ -31,7 +31,7 @@ struct FindParkingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            filters
+            filterBar
             ZStack(alignment: .top) {
                 map
                 searchAreaButton
@@ -46,16 +46,21 @@ struct FindParkingView: View {
         .navigationTitle("Find Parking")
         .navigationBarTitleDisplayMode(.inline)
         .task { if case .idle = nearby { await search(in: nil) } }
-        .onChange(of: minMinutes) {
-            area.setStayingMinutes(minMinutes > 0 ? minMinutes : nil)
+        .onAppear { area.setFilters(filters) }
+        .onChange(of: filters) {
+            // Recolor right away; the search below refreshes the results.
+            area.setFilters(filters)
             Task { await search(in: lastQueryRegion) }
         }
-        .onChange(of: freeOnly) { Task { await search(in: lastQueryRegion) } }
+    }
+
+    private var filters: CurbFilters {
+        CurbFilters(stayingMinutes: minMinutes > 0 ? minMinutes : nil, freeOnly: freeOnly)
     }
 
     // MARK: - Pieces
 
-    private var filters: some View {
+    private var filterBar: some View {
         HStack(spacing: 12) {
             Menu {
                 Picker("Staying for", selection: $minMinutes) {
@@ -86,7 +91,7 @@ struct FindParkingView: View {
         .padding(.top, 8)
         .padding(.bottom, 4)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            CurbLegend()
+            CurbLegend(filtersActive: filters.isActive)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
                 .padding(.bottom, 6)
@@ -95,13 +100,13 @@ struct FindParkingView: View {
 
     private var map: some View {
         let shift = zoomStep.map(CurbLine.shiftMeters(step:)) ?? 0
-        let staying = minMinutes > 0 ? minMinutes : nil
+        let filters = filters
         var highlights: [HighlightCurb] = []
         var pins: [ResultPin] = []
         if case .loaded(let answer) = nearby {
             for (index, spot) in answer.results.enumerated() {
                 // Pins sit halfway along their block side so neighbors overlap less.
-                let color = spot.kind(stayingMinutes: staying).color
+                let color = spot.kind(filters: filters).color
                 pins.append(ResultPin(index: index, coordinate: spot.zoneCenter, color: color))
                 guard let path = spot.path, path.count >= 2 else { continue }
                 highlights.append(HighlightCurb(
@@ -117,10 +122,11 @@ struct FindParkingView: View {
         for pin in pins { key.combine(pin.coordinate.latitude); key.combine(pin.coordinate.longitude) }
         key.combine(selection)
         key.combine(zoomStep)
-        key.combine(staying)
+        key.combine(filters.stayingMinutes)
+        key.combine(filters.freeOnly)
 
         return CurbMapView(
-            areaLayers: area.layers,
+            area: area,
             highlights: highlights,
             highlightsKey: key.finalize(),
             pins: pins,
@@ -178,7 +184,7 @@ struct FindParkingView: View {
         case .loaded(let answer):
             ScrollViewReader { proxy in
                 List(Array(answer.results.enumerated()), id: \.offset) { index, spot in
-                    SpotRow(rank: index + 1, spot: spot, kind: spot.kind(stayingMinutes: minMinutes > 0 ? minMinutes : nil))
+                    SpotRow(rank: index + 1, spot: spot, kind: spot.kind(filters: filters))
                         .contentShape(Rectangle())
                         .onTapGesture { selection = index }
                         .listRowBackground(selection == index ? Color.accentColor.opacity(0.15) : nil)

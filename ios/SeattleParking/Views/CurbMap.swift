@@ -8,6 +8,13 @@ import UIKit
 
 /// Every street side's curb, grouped by color and ready to hand to MapKit as
 /// one MKMultiPolyline per color.
+/// The Find Parking filters, as they affect street colors.
+struct CurbFilters: Equatable, Sendable {
+    var stayingMinutes: Int?
+    var freeOnly = false
+    var isActive: Bool { stayingMinutes != nil || freeOnly }
+}
+
 struct AreaLayers {
     var version = 0
     var groups: [(color: UIColor, lines: [[CLLocationCoordinate2D]])] = []
@@ -26,7 +33,12 @@ struct AreaLayers {
 @MainActor @Observable
 final class AreaCurbs {
     /// What the map draws.
-    private(set) var layers = AreaLayers()
+    private(set) var layers = AreaLayers() {
+        didSet { onLayers?(layers) }
+    }
+    /// Set by the map view: new layers go straight to MapKit, without waiting
+    /// for SwiftUI to re-render the screen.
+    @ObservationIgnored var onLayers: ((AreaLayers) -> Void)?
     /// True when the view spans more tiles than we load at once.
     private(set) var zoomedOutTooFar = false
 
@@ -61,20 +73,20 @@ final class AreaCurbs {
 
     private var cache: [Tile: [AreaBlockface]] = [:]
     private var split: Set<Tile> = []
-    private var inFlight: [Tile: Task<Void, Never>] = [:]
+    private var inFlight: [Tile: (token: UUID, task: Task<Void, Never>)] = [:]
     private var queue: [Tile] = []
     private var unsupported = false
 
     private var visible: MKCoordinateRegion?
     private var zoomStep: Int?
     private var rebuildTask: Task<Void, Never>?
-    private var drawnKey: (ids: Int, step: Int, staying: Int?)?
-    private var stayingMinutes: Int?
+    private var drawnKey: (ids: Int, step: Int, filters: CurbFilters)?
+    private var filters = CurbFilters()
 
-    /// The "Staying for" filter; recolors without refetching.
-    func setStayingMinutes(_ minutes: Int?) {
-        guard minutes != stayingMinutes else { return }
-        stayingMinutes = minutes
+    /// The search filters; recolors without refetching.
+    func setFilters(_ new: CurbFilters) {
+        guard new != filters else { return }
+        filters = new
         scheduleRebuild(delay: 0)
     }
 
@@ -91,8 +103,8 @@ final class AreaCurbs {
 
         // Stop loading tiles that are no longer in view.
         let wanted = Set(needed ?? [])
-        for (tile, task) in inFlight where !wanted.contains(tile) {
-            task.cancel()
+        for (tile, entry) in inFlight where !wanted.contains(tile) {
+            entry.task.cancel()
             inFlight[tile] = nil
         }
         queue = (needed ?? []).filter { cache[$0] == nil && inFlight[$0] == nil }
@@ -128,13 +140,16 @@ final class AreaCurbs {
         guard !unsupported else { queue = []; return }
         while inFlight.count < Self.maxConcurrent, !queue.isEmpty {
             let tile = queue.removeFirst()
-            inFlight[tile] = Task { await self.load(tile) }
+            let token = UUID()
+            inFlight[tile] = (token, Task { await self.load(tile, token: token) })
         }
     }
 
-    private func load(_ tile: Tile) async {
+    private func load(_ tile: Tile, token: UUID) async {
         defer {
-            inFlight[tile] = nil
+            // Only clear our own entry: a cancelled load can finish after the
+            // same tile was queued again.
+            if inFlight[tile]?.token == token { inFlight[tile] = nil }
             pump()
         }
         do {
@@ -151,7 +166,16 @@ final class AreaCurbs {
         } catch ParkingError.notFound {
             unsupported = true
         } catch {
-            // Cancelled or a network hiccup: retried on the next camera change.
+            // Cancelled (left the view) or a network hiccup: retry shortly if
+            // it's still in view, instead of waiting for the map to move.
+            guard !Task.isCancelled else { return }
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                guard let visible, cache[tile] == nil, inFlight[tile] == nil,
+                      tiles(covering: visible)?.contains(tile) == true else { return }
+                queue.append(tile)
+                pump()
+            }
         }
     }
 
@@ -162,24 +186,24 @@ final class AreaCurbs {
         guard let visible, let zoomStep else { return }
         let tiles = Array(cache.values)
         let bounds = visible.expanded(by: 1.5)
-        let staying = stayingMinutes
+        let filters = filters
         rebuildTask = Task {
             if delay > 0 { try? await Task.sleep(for: .milliseconds(delay)) }
             guard !Task.isCancelled else { return }
             let (layers, idsHash) = await Task.detached(priority: .userInitiated) {
-                Self.buildLayers(tiles: tiles, bounds: bounds, step: zoomStep, staying: staying)
+                Self.buildLayers(tiles: tiles, bounds: bounds, step: zoomStep, filters: filters)
             }.value
             guard !Task.isCancelled else { return }
             // Same lines at the same zoom step: leave MapKit alone.
-            if let drawnKey, drawnKey.ids == idsHash, drawnKey.step == zoomStep, drawnKey.staying == staying { return }
-            drawnKey = (idsHash, zoomStep, staying)
+            if let drawnKey, drawnKey.ids == idsHash, drawnKey.step == zoomStep, drawnKey.filters == filters { return }
+            drawnKey = (idsHash, zoomStep, filters)
             var next = layers
             next.version = self.layers.version + 1
             self.layers = next
         }
     }
 
-    nonisolated private static func buildLayers(tiles: [[AreaBlockface]], bounds: MKCoordinateRegion, step: Int, staying: Int?) -> (AreaLayers, Int) {
+    nonisolated private static func buildLayers(tiles: [[AreaBlockface]], bounds: MKCoordinateRegion, step: Int, filters: CurbFilters) -> (AreaLayers, Int) {
         let shift = CurbLine.shiftMeters(step: step)
         var seen = Set<String>()
         var lines: [CurbLine.Kind: [[CLLocationCoordinate2D]]] = [:]
@@ -189,7 +213,7 @@ final class AreaCurbs {
                 let line = CurbLine.offset(b.path, side: b.side, meters: shift)
                 let kind = CurbLine.kind(canParkNow: b.canParkNow, freeNow: b.freeNow, timeLimitMinutes: b.timeLimitMinutes,
                                          postedLimitMinutes: b.postedLimitMinutes, restrictionInMinutes: b.restrictionInMinutes,
-                                         stayingMinutes: staying)
+                                         filters: filters)
                 lines[kind, default: []].append(line)
             }
         }
@@ -252,52 +276,60 @@ enum CurbLine {
     /// What a block side means for you right now.
     enum Kind: Int, CaseIterable {
         // Drawing order: later kinds draw on top.
-        case noParking, restricted, okForNow, free
+        case noParking, restricted, okForFilters, free
 
         var color: UIColor {
             switch self {
             case .noParking: .systemRed
             case .restricted: .systemYellow
-            case .okForNow: UIColor(red: 0.71, green: 0.90, blue: 0.11, alpha: 1) // chartreuse
+            case .okForFilters: UIColor(red: 0.71, green: 0.90, blue: 0.11, alpha: 1) // chartreuse
             case .free: .systemGreen
             }
         }
-        var label: String {
+
+        func label(filtersActive: Bool) -> String {
             switch self {
-            case .noParking: "No parking"
-            case .restricted: "Limited / paid"
-            case .okForNow: "OK for now"
-            case .free: "No limit"
+            case .noParking: filtersActive ? "Won't work" : "No parking"
+            case .restricted: "Restrictions"
+            case .okForFilters: "OK for your stay"
+            case .free: "Free"
             }
+        }
+
+        /// The colors shown with and without filters.
+        static func legend(filtersActive: Bool) -> [Kind] {
+            filtersActive ? [.free, .okForFilters, .noParking] : [.free, .restricted, .noParking]
         }
     }
 
-    /// How far ahead an upcoming restriction counts when no stay is chosen.
+    /// Without a chosen stay, a restriction starting within this long counts.
     static let restrictionHorizonMinutes = 12 * 60
 
-    /// - Red: can't park now.
-    /// - Yellow: paid now, or a time limit (or a restriction starting) that
-    ///   doesn't cover the chosen stay. With "Any time", any limit counts.
-    /// - Green-yellow: free now, and either a time limit that covers the
-    ///   chosen stay or a restriction that starts later.
-    /// - Green: free now, no limit, nothing starting soon.
+    /// Without filters: green = free now with no limit and nothing coming up,
+    /// yellow = any restriction (paid now, a time limit, or one starting
+    /// within 12 h), red = no parking now.
+    ///
+    /// With filters (a stay length and/or Free only): green = free with no
+    /// restriction during the stay, green-yellow = restricted but fine for
+    /// the filters, red = no parking now or doesn't fit the filters.
     static func kind(canParkNow: Bool, freeNow: Bool, timeLimitMinutes: Int?, postedLimitMinutes: Int?,
-                     restrictionInMinutes: Int?, stayingMinutes staying: Int?) -> Kind {
+                     restrictionInMinutes: Int?, filters: CurbFilters) -> Kind {
         if !canParkNow { return .noParking }
-        if !freeNow { return .restricted }
         var posted = postedLimitMinutes
         // Older servers only send the combined limit: treat it as posted.
         if posted == nil, restrictionInMinutes == nil { posted = timeLimitMinutes }
-        if let posted {
-            guard let staying, posted >= staying else { return .restricted }
-            if let starts = restrictionInMinutes, starts < staying { return .restricted }
-            return .okForNow
+
+        let horizon = filters.stayingMinutes ?? restrictionHorizonMinutes
+        let restrictionSoon = restrictionInMinutes.map { $0 < horizon } ?? false
+        if freeNow, posted == nil, !restrictionSoon { return .free }
+        guard filters.isActive else { return .restricted }
+
+        var fits = !filters.freeOnly || freeNow
+        if let staying = filters.stayingMinutes {
+            if let posted, posted < staying { fits = false }
+            if let starts = restrictionInMinutes, starts < staying { fits = false }
         }
-        if let starts = restrictionInMinutes {
-            if let staying, starts < staying { return .restricted }
-            if starts <= restrictionHorizonMinutes { return .okForNow }
-        }
-        return .free
+        return fits ? .okForFilters : .noParking
     }
 
     /// Camera distance limits (meters above the map): the widest view is about
@@ -400,7 +432,8 @@ struct MapFocus: Equatable {
 /// slow for hundreds of streets; here the street colors are three
 /// MKMultiPolylines (one per color) and only change when their data does.
 struct CurbMapView: UIViewRepresentable {
-    var areaLayers: AreaLayers
+    /// Street colors; new layers are pushed straight to the map.
+    var area: AreaCurbs
     var highlights: [HighlightCurb] = []
     /// Changes whenever `highlights` should be redrawn.
     var highlightsKey: Int = 0
@@ -450,19 +483,11 @@ struct CurbMapView: UIViewRepresentable {
         let c = context.coordinator
         c.parent = self
 
-        if areaLayers.version != c.areaVersion {
-            c.areaVersion = areaLayers.version
-            map.removeOverlays(c.areaOverlays)
-            c.areaOverlays = areaLayers.groups.compactMap { group in
-                guard !group.lines.isEmpty else { return nil }
-                let multi = MKMultiPolyline(group.lines.map { MKPolyline(coordinates: $0, count: $0.count) })
-                c.styles[ObjectIdentifier(multi)] = (group.color.withAlphaComponent(0.85), areaLayers.width)
-                return multi
-            }
-            // Below the highlights.
-            for (i, overlay) in c.areaOverlays.enumerated() { map.insertOverlay(overlay, at: i, level: .aboveRoads) }
-            c.pruneStyles(keeping: c.areaOverlays + c.highlightOverlays)
+        area.onLayers = { [weak map, weak c] layers in
+            guard let map, let c else { return }
+            c.apply(layers, to: map)
         }
+        c.apply(area.layers, to: map)
 
         if highlightsKey != c.highlightsKey {
             c.highlightsKey = highlightsKey
@@ -524,6 +549,22 @@ struct CurbMapView: UIViewRepresentable {
 
         init(_ parent: CurbMapView) { self.parent = parent }
 
+        /// Swaps in new street-color overlays (once per version).
+        func apply(_ layers: AreaLayers, to map: MKMapView) {
+            guard layers.version != areaVersion else { return }
+            areaVersion = layers.version
+            map.removeOverlays(areaOverlays)
+            areaOverlays = layers.groups.compactMap { group in
+                guard !group.lines.isEmpty else { return nil }
+                let multi = MKMultiPolyline(group.lines.map { MKPolyline(coordinates: $0, count: $0.count) })
+                styles[ObjectIdentifier(multi)] = (group.color.withAlphaComponent(0.85), layers.width)
+                return multi
+            }
+            // Below the highlights.
+            for (i, overlay) in areaOverlays.enumerated() { map.insertOverlay(overlay, at: i, level: .aboveRoads) }
+            pruneStyles(keeping: areaOverlays + highlightOverlays)
+        }
+
         func pruneStyles(keeping overlays: [MKOverlay]) {
             let live = Set(overlays.map { ObjectIdentifier($0 as AnyObject) })
             styles = styles.filter { live.contains($0.key) }
@@ -578,26 +619,27 @@ struct CurbMapView: UIViewRepresentable {
 
 /// A one-line color key for the street colors.
 struct CurbLegend: View {
+    var filtersActive = false
+
     var body: some View {
         HStack(spacing: 12) {
-            ForEach(CurbLine.Kind.allCases.reversed(), id: \.self) { kind in
+            ForEach(CurbLine.Kind.legend(filtersActive: filtersActive), id: \.self) { kind in
                 HStack(spacing: 4) {
                     Capsule().fill(Color(kind.color)).frame(width: 14, height: 4)
-                    Text(kind.label)
+                    Text(kind.label(filtersActive: filtersActive))
                 }
             }
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Street colors: green no limit, light green OK for now, yellow limited or paid, red no parking")
     }
 }
 
 extension Spot {
-    func kind(stayingMinutes: Int?) -> CurbLine.Kind {
+    func kind(filters: CurbFilters) -> CurbLine.Kind {
         CurbLine.kind(canParkNow: true, freeNow: freeNow, timeLimitMinutes: timeLimitMinutes, postedLimitMinutes: postedLimitMinutes,
-                      restrictionInMinutes: restrictionInMinutes, stayingMinutes: stayingMinutes)
+                      restrictionInMinutes: restrictionInMinutes, filters: filters)
     }
 }
 
@@ -629,11 +671,11 @@ struct HereMap: View {
             return HighlightCurb(coordinates: CurbLine.offset(path, side: b.side, meters: shift),
                                  color: CurbLine.kind(canParkNow: b.canParkNow, freeNow: b.freeNow ?? true,
                                                       timeLimitMinutes: b.timeLimitMinutes, postedLimitMinutes: b.postedLimitMinutes,
-                                                      restrictionInMinutes: b.restrictionInMinutes, stayingMinutes: nil).color,
+                                                      restrictionInMinutes: b.restrictionInMinutes, filters: CurbFilters()).color,
                                  width: 5)
         }
         CurbMapView(
-            areaLayers: area.layers,
+            area: area,
             highlights: highlights,
             highlightsKey: zoomStep ?? 0,
             focus: MapFocus(id: 0, region: hereRegion),

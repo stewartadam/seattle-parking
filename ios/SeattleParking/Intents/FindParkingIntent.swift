@@ -55,7 +55,7 @@ struct SpotsSnippet: View {
                     Text("\(index + 1)")
                         .font(.headline)
                         .frame(width: 24, height: 24)
-                        .background(Circle().fill(Color(spot.kind(stayingMinutes: minutes).color).opacity(0.3)))
+                        .background(Circle().fill(Color(spot.kind(filters: CurbFilters(stayingMinutes: minutes)).color).opacity(0.3)))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(spot.street).font(.subheadline.bold()).lineLimit(2)
                         Text(spot.summary).font(.subheadline)
