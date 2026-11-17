@@ -58,18 +58,11 @@ struct SpotsSnippet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(spot.street).font(.subheadline.bold()).lineLimit(2)
                         Text(spot.summary).font(.subheadline)
-                        Text(distanceLabel(spot)).font(.caption).foregroundStyle(.secondary)
+                        Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
         }
         .padding()
-    }
-
-    private func distanceLabel(_ spot: Spot) -> String {
-        let feet = Measurement(value: Double(spot.distanceMeters), unit: UnitLength.meters).converted(to: .feet).value
-        let distance = feet < 1000 ? "\(Int((feet / 50).rounded() * 50)) ft" : String(format: "%.1f mi", feet / 5280)
-        let side = spot.side.map { ", \($0) side" } ?? ""
-        return [distance, spot.direction].compactMap { $0 }.joined(separator: " ") + side
     }
 }
