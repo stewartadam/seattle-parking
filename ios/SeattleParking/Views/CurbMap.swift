@@ -16,10 +16,11 @@ struct DrawnCurb: Identifiable {
 /// Loads every blockface in the visible map area from /api/area, so the map
 /// can color all the streets, not just the search results.
 ///
-/// The map is split into a fixed grid of ~250 m tiles. Each tile is fetched
+/// The map is split into a fixed grid of tiles: 250 m when zoomed in, 500 m or
+/// 1 km when zoomed out, so a wide view needs only a few dozen requests. Each tile is fetched
 /// once (a circle query just covering it), cached, and only tiles in
 /// the view are loaded, nearest first, at most four at a time. A tile that hits the server's
-/// cap is split into four smaller tiles.
+/// cap is split into four smaller tiles (repeatedly, down to 125 m).
 @MainActor @Observable
 final class AreaCurbs {
     /// What the map should draw right now.
@@ -32,19 +33,23 @@ final class AreaCurbs {
     // Grid: 250 m at Seattle's latitude.
     nonisolated private static let tileLat = 250.0 / 111_320
     nonisolated private static let tileLon = 250.0 / (111_320 * cos(47.62 * .pi / 180))
-    private static let maxTiles = 64
+    /// Most tiles loaded for one view; the tile size grows until the view fits.
+    private static let maxTiles = 40
+    /// Tile sizes: 250 m × 2^level. -1 is only used when splitting dense tiles.
+    private static let coarsestLevel = 2
+    private static let finestLevel = -1
     private static let maxConcurrent = 4
     /// /api/area returns at most 600 blockfaces; near that means "truncated".
-    private static let serverCap = 590
+    private static let serverCap = 580
     private static let maxDrawn = 4000
 
     struct Tile: Hashable {
-        let level: Int  // 0 = 250 m, 1 = 125 m (a quarter of a level-0 tile)
+        let level: Int  // tile edge = 250 m × 2^level (-1 = 125 m … 2 = 1 km)
         let i: Int      // latitude index
         let j: Int      // longitude index
 
         var size: (lat: Double, lon: Double) {
-            let f = level == 0 ? 1.0 : 0.5
+            let f = pow(2, Double(level))
             return (AreaCurbs.tileLat * f, AreaCurbs.tileLon * f)
         }
         var center: CLLocationCoordinate2D {
@@ -56,7 +61,7 @@ final class AreaCurbs {
             return Int((hypot(h, w) * 1.1).rounded(.up))
         }
         var children: [Tile] {
-            [(0, 0), (0, 1), (1, 0), (1, 1)].map { Tile(level: 1, i: i * 2 + $0.0, j: j * 2 + $0.1) }
+            [(0, 0), (0, 1), (1, 0), (1, 1)].map { Tile(level: level - 1, i: i * 2 + $0.0, j: j * 2 + $0.1) }
         }
     }
 
@@ -97,24 +102,36 @@ final class AreaCurbs {
         rebuild(force: stepChanged)
     }
 
-    /// Tiles intersecting the region (split tiles
-    /// replaced by their quarters), or nil if that's too many to load.
+    /// Tiles intersecting the region at the finest size that keeps the count
+    /// within budget (split tiles replaced by their pieces), or nil if even
+    /// 1 km tiles would be too many.
     private func tiles(covering region: MKCoordinateRegion) -> [Tile]? {
         let lat0 = region.center.latitude - region.span.latitudeDelta / 2
         let lat1 = region.center.latitude + region.span.latitudeDelta / 2
         let lon0 = region.center.longitude - region.span.longitudeDelta / 2
         let lon1 = region.center.longitude + region.span.longitudeDelta / 2
-        let i0 = Int(floor(lat0 / Self.tileLat)), i1 = Int(floor(lat1 / Self.tileLat))
-        let j0 = Int(floor(lon0 / Self.tileLon)), j1 = Int(floor(lon1 / Self.tileLon))
-        guard (i1 - i0 + 1) * (j1 - j0 + 1) <= Self.maxTiles else { return nil }
-        var result: [Tile] = []
-        for i in i0...i1 {
-            for j in j0...j1 {
-                let tile = Tile(level: 0, i: i, j: j)
-                if split.contains(tile) { result += tile.children } else { result.append(tile) }
+        for level in 0...Self.coarsestLevel {
+            let f = pow(2, Double(level))
+            let tLat = Self.tileLat * f, tLon = Self.tileLon * f
+            let i0 = Int(floor(lat0 / tLat)), i1 = Int(floor(lat1 / tLat))
+            let j0 = Int(floor(lon0 / tLon)), j1 = Int(floor(lon1 / tLon))
+            guard (i1 - i0 + 1) * (j1 - j0 + 1) <= Self.maxTiles else { continue }
+            var result: [Tile] = []
+            for i in i0...i1 {
+                for j in j0...j1 { expand(Tile(level: level, i: i, j: j), into: &result) }
             }
+            return result
         }
-        return result
+        return nil
+    }
+
+    /// The tile itself, or its pieces if it was too dense to load whole.
+    private func expand(_ tile: Tile, into result: inout [Tile]) {
+        if split.contains(tile) {
+            for child in tile.children { expand(child, into: &result) }
+        } else {
+            result.append(tile)
+        }
     }
 
     private func pump() {
@@ -134,7 +151,7 @@ final class AreaCurbs {
             let api = try ParkingAPI.fromSettings()
             let answer = try await api.area(tile.center, radiusMeters: tile.radiusMeters)
             guard !Task.isCancelled else { return }
-            if tile.level == 0, answer.blockfaces.count >= Self.serverCap {
+            if tile.level > Self.finestLevel, answer.blockfaces.count >= Self.serverCap {
                 // Too dense for one query: load it as four smaller tiles.
                 split.insert(tile)
                 queue.insert(contentsOf: tile.children.filter { cache[$0] == nil }, at: 0)
