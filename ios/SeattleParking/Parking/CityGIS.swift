@@ -4,8 +4,8 @@ import FoundationNetworking
 #endif
 
 // Client for the City of Seattle's public ArcGIS Online feature services (the
-// same data behind SDOT's parking map). No API key is needed. Mirrors
-// src/arcgis.js on the server.
+// same data behind SDOT's parking map). No API key is needed. The app only
+// downloads whole layers; it never sends a location.
 
 enum CityGIS {
     static let base = "https://services.arcgis.com/ZOyb2t4B0UYuYNYH/arcgis/rest/services"
@@ -19,6 +19,7 @@ enum CityGIS {
 enum CityGISError: LocalizedError {
     case offline
     case failed(String)
+    case noCityData
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +27,8 @@ enum CityGISError: LocalizedError {
             return "I couldn't reach the City of Seattle's parking map. Check your connection and try again."
         case .failed(let detail):
             return "The City of Seattle's parking map didn't answer (\(detail)). Try again in a moment."
+        case .noCityData:
+            return "Seattle Parking needs to download the city's parking data before it can answer, and the download didn't work. Check your connection and try again."
         }
     }
 }
@@ -92,36 +95,6 @@ private struct GISResponse: Decodable {
 struct CityGISClient: Sendable {
     var session: URLSession = .shared
 
-    /// Features within `radiusMeters` of a point (or containing it when 0).
-    func queryNear(_ layer: URL, lat: Double, lon: Double, radiusMeters: Double,
-                   outFields: [String], returnGeometry: Bool = true) async throws -> [GISFeature] {
-        var params = [
-            ("geometry", "\(lon),\(lat)"),
-            ("geometryType", "esriGeometryPoint"),
-            ("inSR", "4326"),
-            ("outSR", "4326"),
-            ("spatialRel", "esriSpatialRelIntersects"),
-            ("outFields", outFields.joined(separator: ",")),
-            ("returnGeometry", String(returnGeometry)),
-            ("f", "json"),
-        ]
-        if radiusMeters > 0 {
-            params.append(("distance", String(radiusMeters)))
-            params.append(("units", "esriSRUnit_Meter"))
-        }
-        return try await query(layer, params)
-    }
-
-    /// Attribute-only query for every feature matching a SQL `where` clause.
-    func queryWhere(_ layer: URL, where clause: String = "1=1", outFields: [String]) async throws -> [GISFeature] {
-        try await query(layer, [
-            ("where", clause),
-            ("outFields", outFields.joined(separator: ",")),
-            ("returnGeometry", "false"),
-            ("f", "json"),
-        ])
-    }
-
     /// How many features the layer has.
     func count(_ layer: URL) async throws -> Int {
         var request = request(layer, [("where", "1=1"), ("returnCountOnly", "true"), ("f", "json")])
@@ -149,10 +122,6 @@ struct CityGISClient: Sendable {
         ])
         request.timeoutInterval = 60
         return try decode(try await send(request))
-    }
-
-    private func query(_ layer: URL, _ params: [(String, String)]) async throws -> [GISFeature] {
-        try decode(try await send(request(layer, params)))
     }
 
     private func request(_ layer: URL, _ params: [(String, String)]) -> URLRequest {

@@ -28,8 +28,8 @@ struct HomeView: View {
             }
             .task {
                 // Download the city's parking data on first launch, and
-                // refresh it when it's over a week old. Answers come from the
-                // city's live service until it's done.
+                // refresh it when it's over a week old. The first answer
+                // waits for the download.
                 await CityData.shared.refreshIfStale()
                 if locationManager.authorizationStatus == .notDetermined {
                     locationManager.requestWhenInUseAuthorization()

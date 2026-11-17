@@ -29,7 +29,7 @@ enum ParkingError: Error, CustomLocalizedStringResourceConvertible {
 }
 
 /// Answers parking questions on the phone, from the downloaded copy of the
-/// city's data (or the city's live map service until that copy arrives).
+/// city's data. Locations never leave the phone.
 struct ParkingAPI {
     let permitZone: String?
 
@@ -54,8 +54,8 @@ struct ParkingAPI {
     }
 
     private func run<T>(_ ask: (ParkingEngine) async throws -> T) async throws -> T {
-        let engine = ParkingEngine(source: await CityData.shared.source())
         do {
+            let engine = ParkingEngine(source: try await CityData.shared.readySource())
             return try await ask(engine)
         } catch let error as CityGISError {
             // Siri reads ParkingError messages; other errors become a generic failure.

@@ -2,7 +2,7 @@
 
 A small iOS app that lets Siri answer parking questions using the phone's location, with no Shortcuts setup and no server needed.
 
-The app keeps a copy of the City of Seattle's street parking data on the phone (about 46,000 block sides, about a 3 MB download and 10 MB on disk) and refreshes it every week, so answers work without a connection. It downloads the copy on first launch; until that finishes, it asks the city's public map service directly. The parking rules are a Swift port of the server's `src/parking.js`, in `SeattleParking/Parking/`, and give the same answers.
+The app keeps a copy of the City of Seattle's street parking data on the phone (about 46,000 block sides, about a 3 MB download and 10 MB on disk) and refreshes it every week, so answers work without a connection. It downloads the copy on first launch, and the first question waits for that download. Your location never leaves the phone. The parking rules are a Swift port of the server's `src/parking.js`, in `SeattleParking/Parking/`, and give the same answers.
 
 | Say | What happens |
 | --- | --- |

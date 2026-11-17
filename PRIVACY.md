@@ -11,9 +11,7 @@ Seattle Parking looks up street parking rules in Seattle. This page explains wha
 
 ## Downloading the city's data
 
-The app downloads the City of Seattle's public parking data from the city's map service (hosted by Esri's ArcGIS Online) when you first open it and about once a week after that. These downloads are the same for everyone and don't include your location.
-
-If you ask a question before the first download finishes, the app sends the location you're asking about to the city's map service to get the answer for that one question. The city's map service may keep standard technical logs of these requests under the [City of Seattle's privacy statement](https://www.seattle.gov/privacy) and [Esri's privacy policy](https://www.esri.com/en-us/privacy/overview).
+The app downloads the City of Seattle's public parking data from the city's map service (hosted by Esri's ArcGIS Online) when you first open it and about once a week after that. These downloads are the same for everyone and never include your location. The app answers every question from this copy, so your location is never sent anywhere.
 
 ## What the app doesn't do
 

@@ -4,8 +4,8 @@ import Foundation
 //   here()   "What are the parking rules where I am?"
 //   nearby() "Where's the nearest place I can park?"
 //   area()   every block side around a point, for coloring the map
-// The data comes from a ParkingDataSource: the downloaded copy of the city's
-// data when there is one, otherwise a live query to the city.
+// The data comes from a ParkingDataSource: the copy of the city's data
+// downloaded to the phone.
 
 /// One blockface near a point.
 struct NearbyBlockface: Sendable {

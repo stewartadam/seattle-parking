@@ -2,36 +2,8 @@ import Foundation
 
 // Where the parking data comes from: a copy of the whole city's data kept on
 // the phone (about 46,000 block sides), refreshed weekly, so answers work
-// offline. Until the first download finishes, questions go straight to the
-// city's map service instead.
-
-// MARK: - Live: ask the city for each question
-
-struct LiveCity: ParkingDataSource {
-    var client = CityGISClient()
-
-    func blockfaces(near origin: Coordinate, radiusMeters: Double) async throws -> [NearbyBlockface] {
-        let features = try await client.queryNear(CityGIS.parkingCategories, lat: origin.lat, lon: origin.lon,
-                                                  radiusMeters: radiusMeters, outFields: BlockfaceRules.fields)
-        return features.compactMap { f -> NearbyBlockface? in
-            let paths = f.geometry?.paths.map(flatten) ?? []
-            let (distance, point) = Geo.distance(from: origin, to: paths)
-            guard let point, distance.isFinite else { return nil }
-            return NearbyBlockface(rules: BlockfaceRules(f.attributes), paths: paths, distance: distance, point: point)
-        }
-        .sorted { $0.distance < $1.distance }
-    }
-
-    func zone(at origin: Coordinate) async throws -> RPZZone? {
-        let zones = try await client.queryNear(CityGIS.rpzZones, lat: origin.lat, lon: origin.lon, radiusMeters: 0,
-                                               outFields: ["RPZ_ZONE", "NAME", "INEFFECT"], returnGeometry: false)
-        return zones.first.map { RPZZone($0.attributes) }
-    }
-
-    func rpzHours() async -> [String: String] {
-        await RPZHoursCache.shared.hours(client)
-    }
-}
+// offline. Questions are only ever answered from this copy: your location
+// never leaves the phone. Without a copy, a question waits for the download.
 
 /// [[[lon, lat], ...], ...] -> [[lon, lat, lon, lat, ...], ...]
 private func flatten(_ paths: [[[Double]]]) -> [[Double]] {
@@ -47,25 +19,6 @@ extension RPZZone {
 
 private func collapseWhitespace(_ s: String) -> String {
     s.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
-}
-
-/// RPZ hours by zone for live answers, fetched at most once a day.
-actor RPZHoursCache {
-    static let shared = RPZHoursCache()
-    private var cached: (at: Date, hours: [String: String])?
-
-    func hours(_ client: CityGISClient) async -> [String: String] {
-        if let cached, Date().timeIntervalSince(cached.at) < 24 * 3600 { return cached.hours }
-        guard let zones = try? await client.queryWhere(CityGIS.rpzZones, outFields: ["RPZ_ZONE", "INEFFECT"]) else {
-            return [:] // Schedules then say the hours aren't known.
-        }
-        var hours: [String: String] = [:]
-        for z in zones {
-            if let zone = z.attributes.text("RPZ_ZONE"), let h = z.attributes.text("INEFFECT") { hours[zone] = h }
-        }
-        cached = (Date(), hours)
-        return hours
-    }
 }
 
 // MARK: - Offline: the whole city on the phone
@@ -237,13 +190,19 @@ actor CityData {
             .appending(path: "city-parking.json")
     }
 
-    /// The best source for a question right now: the phone's copy, or the
-    /// city's live service if there isn't one yet. Starts a refresh when the
-    /// copy is missing or over a week old.
-    func source() -> ParkingDataSource {
+    /// The phone's copy of the city data, for answering a question. Starts a
+    /// background refresh when it's over a week old. With no copy yet, downloads
+    /// it first, and throws if that fails.
+    func readySource() async throws -> ParkingDataSource {
         loadIfNeeded()
-        refreshIfStale()
-        return city ?? LiveCity()
+        if let city {
+            refreshIfStale()
+            return city
+        }
+        refresh() // or join the download already under way
+        await downloadTask?.value
+        guard let city else { throw CityGISError.noCityData }
+        return city
     }
 
     func currentState() -> State {
