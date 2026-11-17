@@ -2,7 +2,7 @@
 // location (lat/lon or a spoken address) and run the query.
 
 import { geocode } from './geocode.js';
-import { describeHere, findParking } from './parking.js';
+import { describeHere, findParking, describeArea } from './parking.js';
 
 export class UserError extends Error {}
 
@@ -31,6 +31,13 @@ function withMatched(result, loc) {
 export async function parkingRulesHere(args, fetchImpl = fetch) {
   const loc = await resolveLocation(args, fetchImpl);
   const result = await describeHere({ ...loc, permitZone: args.permitZone || undefined, fetchImpl });
+  return withMatched(result, loc);
+}
+
+export async function parkingArea(args, fetchImpl = fetch) {
+  const loc = await resolveLocation(args, fetchImpl);
+  const radius = args.radiusMeters == null || args.radiusMeters === '' ? undefined : Number(args.radiusMeters);
+  const result = await describeArea({ ...loc, radiusMeters: radius, permitZone: args.permitZone || undefined, fetchImpl });
   return withMatched(result, loc);
 }
 

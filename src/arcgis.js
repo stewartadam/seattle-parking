@@ -41,3 +41,18 @@ export async function queryNear(layerUrl, { lat, lon, radiusMeters, outFields, r
   if (body.error) throw new Error(`Seattle GIS query failed: ${body.error.message ?? JSON.stringify(body.error)}`);
   return body.features ?? [];
 }
+
+/** Attribute-only query for every feature matching a SQL `where` clause. */
+export async function queryWhere(layerUrl, { where = '1=1', outFields }, fetchImpl = fetch) {
+  const params = new URLSearchParams({ where, outFields: outFields.join(','), returnGeometry: 'false', f: 'json' });
+  const res = await fetchImpl(`${layerUrl}/query`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`Seattle GIS query failed: HTTP ${res.status}`);
+  const body = await res.json();
+  if (body.error) throw new Error(`Seattle GIS query failed: ${body.error.message ?? JSON.stringify(body.error)}`);
+  return body.features ?? [];
+}

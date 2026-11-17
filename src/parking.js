@@ -4,7 +4,7 @@
 // Each answer includes structured data plus a `speech` string written to be
 // read aloud by Siri or ChatGPT voice.
 
-import { PARKING_CATEGORIES_LAYER, RPZ_ZONES_LAYER, queryNear } from './arcgis.js';
+import { PARKING_CATEGORIES_LAYER, RPZ_ZONES_LAYER, queryNear, queryWhere } from './arcgis.js';
 import { compassDirection, distanceToPaths } from './geo.js';
 import { formatClock, formatLimit, parseClock, parsePeakHours, seattleTime } from './schedule.js';
 
@@ -22,6 +22,8 @@ const RPZ_FIELDS = ['RPZ_ZONE', 'NAME', 'INEFFECT'];
 export const HERE_RADIUS_M = 60;
 export const DEFAULT_SEARCH_RADIUS_M = 500;
 export const MAX_SEARCH_RADIUS_M = 1500;
+export const MAX_AREA_RADIUS_M = 800;
+export const MAX_AREA_BLOCKFACES = 600;
 
 // ---------------------------------------------------------------------------
 // Formatting
@@ -46,6 +48,42 @@ export function formatStreet(unitdesc) {
     .trim()
     .split(/\s+/)
     .map((w) => STREET_WORDS[w] ?? (/^\d/.test(w) ? w.toLowerCase() : w[0] + w.slice(1).toLowerCase()))
+    .join(' ');
+}
+
+const DIRECTIONS = new Set(['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW']);
+const LABEL_SUFFIXES = {
+  AVE: 'Ave', AV: 'Ave', AVENUE: 'Ave', ST: 'St', STREET: 'St', PL: 'Pl', PLACE: 'Pl', DR: 'Dr', DRIVE: 'Dr',
+  BLVD: 'Blvd', BOULEVARD: 'Blvd', WAY: 'Way', CT: 'Ct', COURT: 'Ct', LN: 'Ln', LANE: 'Ln', RD: 'Rd', ROAD: 'Rd',
+  PKWY: 'Pkwy', PARKWAY: 'Pkwy', TER: 'Ter', TERRACE: 'Ter', CIR: 'Cir', CIRCLE: 'Cir', HWY: 'Hwy', HIGHWAY: 'Hwy',
+};
+
+/**
+ * Short display form of an SDOT block description, e.g.
+ * "E LYNN ST BETWEEN YALE AVE E AND EASTLAKE AVE E" ->
+ * "E. Lynn St between Yale Ave E and Eastlake Ave E". Single-letter prefix
+ * directions get a period; other directions stay as uppercase letters.
+ */
+export function formatStreetLabel(unitdesc) {
+  if (!unitdesc) return 'Unnamed block';
+  let startOfName = true;
+  return unitdesc
+    .trim()
+    .split(/\s+/)
+    .map((w) => {
+      const word = w.toUpperCase();
+      const atStart = startOfName;
+      startOfName = false;
+      if (word === 'BETWEEN' || word === 'AND') {
+        startOfName = true;
+        return word.toLowerCase();
+      }
+      if (DIRECTIONS.has(word)) return atStart && word.length === 1 ? `${word}.` : word;
+      if (/^\d+(ST|ND|RD|TH)$/.test(word)) return word.toLowerCase();
+      if (/^\d/.test(word)) return word;
+      if (LABEL_SUFFIXES[word]) return LABEL_SUFFIXES[word];
+      return word[0] + word.slice(1).toLowerCase();
+    })
     .join(' ');
 }
 
@@ -82,6 +120,118 @@ function currentRate(a, now) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Weekly schedule, for display ("when do these rules apply?")
+
+const DAY_LABELS = { WKD: 'Mon–Fri', SAT: 'Sat', SUN: 'Sun' };
+
+function clockRange(start, end) {
+  return `${formatClock(start)}–${formatClock(end)}`;
+}
+
+/** Day types with identical text, labeled "daily", "Mon–Sat", "Sat–Sun" or a list. */
+function dayGroups(textByDay) {
+  const groups = [];
+  for (const d of DAY_TYPES) {
+    const text = textByDay[d];
+    const g = groups.find((x) => x.text === text);
+    if (g) g.days.push(d); else groups.push({ text, days: [d] });
+  }
+  return groups.map(({ text, days }) => {
+    const key = days.join(',');
+    const label = key === 'WKD,SAT,SUN' ? 'daily'
+      : key === 'WKD,SAT' ? 'Mon–Sat'
+      : key === 'SAT,SUN' ? 'Sat–Sun'
+      : days.map((d) => DAY_LABELS[d]).join(', ');
+    return { text, label };
+  });
+}
+
+function formatMoney(rate) {
+  return Number.isInteger(rate) ? `$${rate}` : `$${rate.toFixed(2)}`;
+}
+
+/** "Mon–Sat 8 AM–8 PM ($1–$2.50/hr); free Sun", or null if the data has no paid hours. */
+function paidSchedule(a) {
+  const textByDay = {};
+  for (const d of DAY_TYPES) {
+    const start = parseClock(a[`START_TIME_${d}`]);
+    const end = parseClock(a[`END_TIME_${d}`]);
+    if (start == null || end == null) { textByDay[d] = null; continue; }
+    const rates = [1, 2, 3].map((i) => a[`${d}_RATE${i}`]).filter((r) => r != null && r > 0);
+    const lo = Math.min(...rates);
+    const hi = Math.max(...rates);
+    const rateText = !rates.length ? '' : lo === hi ? ` (${formatMoney(lo)}/hr)` : ` (${formatMoney(lo)}–${formatMoney(hi)}/hr)`;
+    textByDay[d] = `${clockRange(start, end === 0 ? 1440 : end)}${rateText}`;
+  }
+  const groups = dayGroups(textByDay);
+  if (groups.every((g) => g.text == null)) return null;
+  const paid = groups.filter((g) => g.text != null).map((g) => `${g.label} ${g.text}`);
+  const free = groups.filter((g) => g.text == null).map((g) => g.label);
+  return [paid.join(', '), free.length && `free ${free.join(', ')}`].filter(Boolean).join('; ');
+}
+
+/** "Monday-Saturday 7 AM to 6 PM" -> "Mon–Sat 7 AM–6 PM". */
+function shortenRpzHours(text) {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/\b(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day\b/gi, (_, d) => d.slice(0, 3))
+    .replace(/\s*-\s*/g, '–')
+    .replace(/\s+to\s+/gi, '–')
+    .trim();
+}
+
+/**
+ * When a blockface's rules apply (all week), as short display text, e.g.
+ * "2-hour limit, paid Mon–Sat 8 AM–8 PM ($2.50/hr); free Sun · no parking 7 AM–9 AM weekdays".
+ * Hours the city data doesn't have are called out instead of guessed.
+ */
+export function blockfaceSchedule(a, { rpzHours } = {}) {
+  const parts = [];
+  const limit = a.PARKING_TIME_LIMIT || null;
+  const limitText = limit ? `${formatLimit(limit)} limit` : null;
+  switch (a.PARKING_CATEGORY) {
+    case 'Paid Parking': {
+      const paid = paidSchedule(a);
+      parts.push([limitText, paid ? `paid ${paid}` : 'paid hours not in city data'].filter(Boolean).join(', '));
+      break;
+    }
+    case 'Time Limited Parking':
+      parts.push(`${limitText ?? 'time limited'}, hours not in city data, check the sign`);
+      break;
+    case 'Restricted Parking Zone': {
+      const hours = a.RPZ_ZONE ? rpzHours?.get(String(a.RPZ_ZONE)) : null;
+      const visitor = a.RPZ_ZONE
+        ? `${formatLimit(limit ?? 120)} limit without a zone ${a.RPZ_ZONE} permit`
+        : `${formatLimit(limit ?? 120)} limit without a permit`;
+      parts.push(hours ? `${visitor}, ${shortenRpzHours(hours)}` : `${visitor}, hours not in city data`);
+      break;
+    }
+    default:
+      break;
+  }
+  const peaks = parsePeakHours(a.PEAK_HOUR);
+  if (peaks.length) parts.push(`no parking ${peaks.map(([s, e]) => clockRange(s, e)).join(', ')} weekdays`);
+  if (!parts.length) return null;
+  const text = parts.join(' · ');
+  return text[0].toUpperCase() + text.slice(1);
+}
+
+/** Hours each RPZ zone is in effect ("Monday-Saturday 7 AM to 6 PM"), cached for a day. */
+let rpzHoursCache = null;
+export async function rpzHoursByZone(fetchImpl = fetch) {
+  if (rpzHoursCache && Date.now() - rpzHoursCache.at < 24 * 3600_000) return rpzHoursCache.map;
+  try {
+    const features = await queryWhere(RPZ_ZONES_LAYER, { outFields: ['RPZ_ZONE', 'INEFFECT'] }, fetchImpl);
+    const map = new Map();
+    for (const { attributes: z } of features) if (z.RPZ_ZONE && z.INEFFECT) map.set(String(z.RPZ_ZONE), z.INEFFECT);
+    rpzHoursCache = { at: Date.now(), map };
+    return map;
+  } catch {
+    return new Map(); // Schedules then say the hours aren't known.
+  }
+}
+
 /**
  * Evaluate a blockface's rules at a given Seattle-local time.
  *
@@ -89,19 +239,27 @@ function currentRate(a, now) {
  * @param {{dayType: string, isWeekday: boolean, minutes: number}} now from seattleTime()
  * @param {{permitZone?: string}} [opts] the caller's RPZ permit zone, if any
  */
-export function evaluateBlockface(a, now, { permitZone } = {}) {
+export function evaluateBlockface(a, now, { permitZone, rpzHours } = {}) {
   const r = {
     street: formatStreet(a.UNITDESC),
+    streetLabel: formatStreetLabel(a.UNITDESC),
     side: SIDE_NAMES[a.SIDE] ?? null,
     category: a.PARKING_CATEGORY ?? 'Unknown',
     canParkNow: false,
     freeNow: true,
     ratePerHour: null,
     timeLimitMinutes: null,
+    // Finer detail for map coloring. timeLimitMinutes (above) folds these
+    // together as "how long you can stay from now".
+    postedLimitMinutes: null, // a posted time limit in effect right now
+    restrictionInMinutes: null, // free and unrestricted now, but a restriction starts later today
+    parkableInMinutes: null, // can't park now, but can later today
     rpzZone: a.RPZ_ZONE ?? null,
     peakHourNoParking: a.PEAK_HOUR ?? null,
     spaces: a.PARKING_SPACES ?? null,
     summary: '',
+    // When the rules apply (all week), for display.
+    schedule: blockfaceSchedule(a, { rpzHours }),
     notes: [],
   };
 
@@ -126,12 +284,14 @@ export function evaluateBlockface(a, now, { permitZone } = {}) {
         r.freeNow = !rate;
         r.ratePerHour = rate || null;
         r.timeLimitMinutes = limit;
+        r.postedLimitMinutes = limit;
         r.summary = [
           rate ? `paid, ${formatRate(rate)} until ${formatClock(hours.end)}` : `paid parking until ${formatClock(hours.end)}`,
           limit && `${formatLimit(limit)} limit`,
         ].filter(Boolean).join(', ');
       } else if (now.minutes < hours.start) {
         r.timeLimitMinutes = hours.start - now.minutes;
+        r.restrictionInMinutes = hours.start - now.minutes;
         r.summary = `free until ${formatClock(hours.start)}, then paid`;
       } else {
         r.summary = `free now, paid parking ended at ${formatClock(hours.end)}`;
@@ -143,6 +303,7 @@ export function evaluateBlockface(a, now, { permitZone } = {}) {
     case 'Time Limited Parking':
       r.canParkNow = true;
       r.timeLimitMinutes = limit;
+      r.postedLimitMinutes = limit;
       r.summary = limit ? `free, ${formatLimit(limit)} limit` : 'free, time limited';
       r.notes.push('Check the posted sign for the hours the time limit applies.');
       break;
@@ -157,9 +318,13 @@ export function evaluateBlockface(a, now, { permitZone } = {}) {
       const hours = enforcementHours(a, now);
       if (hours && !(now.minutes >= hours.start && now.minutes < hours.end)) {
         r.summary = `free, ${zone} permit rules not in effect right now`;
-        if (now.minutes < hours.start) r.timeLimitMinutes = hours.start - now.minutes + (limit ?? 0);
+        if (now.minutes < hours.start) {
+          r.timeLimitMinutes = hours.start - now.minutes + (limit ?? 0);
+          r.restrictionInMinutes = hours.start - now.minutes;
+        }
       } else {
         r.timeLimitMinutes = limit ?? 120;
+        r.postedLimitMinutes = r.timeLimitMinutes;
         r.summary = `free, ${formatLimit(r.timeLimitMinutes)} limit without a ${zone} permit`;
         if (!limit) r.notes.push('Visitor time limit not in the city data; 2 hours is typical, check the sign.');
         if (hours) r.summary += ` until ${formatClock(hours.end)}`;
@@ -182,11 +347,17 @@ export function evaluateBlockface(a, now, { permitZone } = {}) {
   const active = peaks.find(([s, e]) => now.minutes >= s && now.minutes < e);
   const upcoming = peaks.filter(([s]) => s > now.minutes).sort((x, y) => x[0] - y[0])[0];
   if (active) {
+    // Parking is allowed again when the tow-away window ends, if the block
+    // allows parking at all.
+    if (r.canParkNow) r.parkableInMinutes = active[1] - now.minutes;
     r.canParkNow = false;
+    r.postedLimitMinutes = null;
+    r.restrictionInMinutes = null;
     r.summary = `no parking right now, rush-hour tow-away zone until ${formatClock(active[1])}`;
   } else if (upcoming && r.canParkNow) {
     const minutesLeft = upcoming[0] - now.minutes;
     r.timeLimitMinutes = r.timeLimitMinutes == null ? minutesLeft : Math.min(r.timeLimitMinutes, minutesLeft);
+    r.restrictionInMinutes = r.restrictionInMinutes == null ? minutesLeft : Math.min(r.restrictionInMinutes, minutesLeft);
     if (minutesLeft <= 180) r.summary += `, but it becomes a tow-away zone at ${formatClock(upcoming[0])}`;
   }
   if (a.PEAK_HOUR) r.notes.push(`No parking ${a.PEAK_HOUR} on weekdays (peak-hour tow-away).`);
@@ -204,9 +375,18 @@ async function nearbyBlockfaces(origin, radiusMeters, fetchImpl) {
     fetchImpl,
   );
   return features
-    .map((f) => ({ attributes: f.attributes, ...distanceToPaths(origin, f.geometry?.paths) }))
+    .map((f) => ({
+      attributes: f.attributes,
+      path: curbLine(f.geometry?.paths),
+      ...distanceToPaths(origin, f.geometry?.paths),
+    }))
     .filter((f) => Number.isFinite(f.distance))
     .sort((x, y) => x.distance - y.distance);
+}
+
+/** The blockface's curb line as [{lat, lon}], for drawing it on a map. */
+function curbLine(paths) {
+  return (paths ?? []).flat().map(([x, y]) => ({ lat: +y.toFixed(6), lon: +x.toFixed(6) }));
 }
 
 async function rpzZoneAt(origin, fetchImpl) {
@@ -230,17 +410,19 @@ function capitalize(s) {
 export async function describeHere({ lat, lon, permitZone, date = new Date(), fetchImpl = fetch }) {
   const origin = { lat, lon };
   const now = seattleTime(date);
-  const [blockfaces, rpz] = await Promise.all([
+  const [blockfaces, rpz, rpzHours] = await Promise.all([
     nearbyBlockfaces(origin, HERE_RADIUS_M, fetchImpl),
     rpzZoneAt(origin, fetchImpl),
+    rpzHoursByZone(fetchImpl),
   ]);
 
   // GPS is only good to ~10–20 m, so report the closest block plus anything
   // nearly as close (typically the other side of the street, or a corner).
   const nearest = blockfaces[0]?.distance ?? Infinity;
   const here = blockfaces.filter((b) => b.distance <= nearest + 20).slice(0, 4).map((b) => ({
-    ...evaluateBlockface(b.attributes, now, { permitZone }),
+    ...evaluateBlockface(b.attributes, now, { permitZone, rpzHours }),
     distanceMeters: Math.round(b.distance),
+    path: b.path,
   }));
 
   const speech = [];
@@ -278,6 +460,37 @@ export async function describeHere({ lat, lon, permitZone, date = new Date(), fe
 }
 
 /**
+ * Every blockface around a point with whether you can park there now, for
+ * coloring a map. Unlike findParking, nothing is filtered or deduplicated.
+ */
+export async function describeArea({ lat, lon, radiusMeters = 300, permitZone, date = new Date(), fetchImpl = fetch }) {
+  const origin = { lat, lon };
+  const now = seattleTime(date);
+  const radius = Math.min(Math.max(radiusMeters, 50), MAX_AREA_RADIUS_M);
+  const [nearby, rpzHours] = await Promise.all([
+    nearbyBlockfaces(origin, radius, fetchImpl),
+    rpzHoursByZone(fetchImpl),
+  ]);
+  const blockfaces = nearby
+    .slice(0, MAX_AREA_BLOCKFACES)
+    .filter((b) => b.path.length >= 2)
+    .map((b) => {
+      const r = evaluateBlockface(b.attributes, now, { permitZone, rpzHours });
+      return {
+        street: r.street, streetLabel: r.streetLabel, side: r.side, schedule: r.schedule, summary: r.summary, canParkNow: r.canParkNow, freeNow: r.freeNow,
+        timeLimitMinutes: r.timeLimitMinutes, postedLimitMinutes: r.postedLimitMinutes,
+        restrictionInMinutes: r.restrictionInMinutes, parkableInMinutes: r.parkableInMinutes, path: b.path,
+      };
+    });
+  const open = blockfaces.filter((b) => b.canParkNow).length;
+  return {
+    speech: `${open} of ${blockfaces.length} block sides within ${formatDistance(radius).replace('about ', '')} allow parking right now.`,
+    radiusMeters: radius,
+    blockfaces,
+  };
+}
+
+/**
  * Nearest blockfaces where the caller can legally park right now.
  *
  * @param {object} p
@@ -294,12 +507,15 @@ export async function findParking({
   const origin = { lat, lon };
   const now = seattleTime(date);
   const radius = Math.min(Math.max(radiusMeters, 50), MAX_SEARCH_RADIUS_M);
-  const blockfaces = await nearbyBlockfaces(origin, radius, fetchImpl);
+  const [blockfaces, rpzHours] = await Promise.all([
+    nearbyBlockfaces(origin, radius, fetchImpl),
+    rpzHoursByZone(fetchImpl),
+  ]);
 
   const seen = new Set();
   const results = [];
   for (const b of blockfaces) {
-    const r = evaluateBlockface(b.attributes, now, { permitZone });
+    const r = evaluateBlockface(b.attributes, now, { permitZone, rpzHours });
     if (!r.canParkNow) continue;
     if (freeOnly && !r.freeNow) continue;
     if (minMinutes && r.timeLimitMinutes != null && r.timeLimitMinutes < minMinutes) continue;
@@ -312,6 +528,7 @@ export async function findParking({
       distanceMeters: Math.round(b.distance),
       direction: formatDistance(b.distance) === 'right here' ? null : compassDirection(origin, b.point),
       point: { lat: +b.point.lat.toFixed(6), lon: +b.point.lon.toFixed(6) },
+      path: b.path,
       mapsUrl: `https://maps.apple.com/?daddr=${b.point.lat.toFixed(6)},${b.point.lon.toFixed(6)}&dirflg=w`,
     });
     if (results.length >= limit) break;

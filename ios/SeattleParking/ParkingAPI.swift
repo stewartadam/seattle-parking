@@ -14,6 +14,8 @@ enum ParkingError: Error, CustomLocalizedStringResourceConvertible {
     case noLocation
     case server(String)
     case nothingNearby(String)
+    /// The server doesn't have this endpoint (an older deployment).
+    case notFound
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
@@ -27,6 +29,8 @@ enum ParkingError: Error, CustomLocalizedStringResourceConvertible {
             return "\(message)"
         case .nothingNearby(let speech):
             return "\(speech)"
+        case .notFound:
+            return "The parking server doesn't support this yet."
         }
     }
 }
@@ -40,10 +44,22 @@ struct Coordinate: Decodable, Hashable {
 
 struct Blockface: Decodable, Hashable {
     let street: String
+    /// Short display form, e.g. "E. Lynn St between Yale Ave E and Eastlake Ave E" (newer servers).
+    let streetLabel: String?
     let side: String?
     let summary: String
+    /// When the rules apply all week, e.g. "2-hour limit, paid Mon–Sat 8 AM–8 PM; free Sun" (newer servers).
+    let schedule: String?
     let canParkNow: Bool
+    let freeNow: Bool?
+    let timeLimitMinutes: Int?
+    /// Newer servers: a posted limit in effect now / minutes until a
+    /// restriction starts (while free now).
+    let postedLimitMinutes: Int?
+    let restrictionInMinutes: Int?
     let distanceMeters: Int?
+    /// The curb line for this side of the block (newer servers only).
+    let path: [Coordinate]?
 }
 
 struct RPZZone: Decodable, Hashable {
@@ -60,20 +76,52 @@ struct HereResponse: Decodable {
 
 struct Spot: Decodable, Hashable {
     let street: String
+    /// Short display form, e.g. "E. Lynn St between Yale Ave E and Eastlake Ave E" (newer servers).
+    let streetLabel: String?
     let side: String?
     let summary: String
+    /// When the rules apply all week, e.g. "2-hour limit, paid Mon–Sat 8 AM–8 PM; free Sun" (newer servers).
+    let schedule: String?
     let freeNow: Bool
     let ratePerHour: Double?
     let timeLimitMinutes: Int?
+    /// Newer servers: a posted limit in effect now / minutes until a
+    /// restriction starts (while free now).
+    let postedLimitMinutes: Int?
+    let restrictionInMinutes: Int?
     let distanceMeters: Int
     let direction: String?
     let point: Coordinate
     let mapsUrl: String
+    /// The curb line for this side of the block (newer servers only).
+    let path: [Coordinate]?
 }
 
 struct NearbyResponse: Decodable {
     let speech: String
     let results: [Spot]
+}
+
+/// One side of one block, for coloring a map (/api/area).
+struct AreaBlockface: Decodable, Hashable {
+    let street: String
+    /// Short display form, e.g. "E. Lynn St between Yale Ave E and Eastlake Ave E" (newer servers).
+    let streetLabel: String?
+    let side: String?
+    let summary: String
+    let canParkNow: Bool
+    let freeNow: Bool
+    /// nil when there's no limit (or an older server that doesn't say).
+    let timeLimitMinutes: Int?
+    /// Newer servers: a posted limit in effect now / minutes until a
+    /// restriction starts (while free now).
+    let postedLimitMinutes: Int?
+    let restrictionInMinutes: Int?
+    let path: [Coordinate]
+}
+
+struct AreaResponse: Decodable {
+    let blockfaces: [AreaBlockface]
 }
 
 private struct ErrorResponse: Decodable {
@@ -103,11 +151,16 @@ struct ParkingAPI {
         try await get("api/here", coordinate: c, extra: [])
     }
 
-    func nearby(_ c: CLLocationCoordinate2D, minMinutes: Int? = nil, freeOnly: Bool = false, limit: Int = 3) async throws -> NearbyResponse {
+    func nearby(_ c: CLLocationCoordinate2D, minMinutes: Int? = nil, freeOnly: Bool = false, limit: Int = 3, radiusMeters: Int? = nil) async throws -> NearbyResponse {
         var extra = [URLQueryItem(name: "limit", value: String(limit))]
+        if let radiusMeters { extra.append(URLQueryItem(name: "radiusMeters", value: String(radiusMeters))) }
         if let minMinutes { extra.append(URLQueryItem(name: "minMinutes", value: String(minMinutes))) }
         if freeOnly { extra.append(URLQueryItem(name: "freeOnly", value: "true")) }
         return try await get("api/nearby", coordinate: c, extra: extra)
+    }
+
+    func area(_ c: CLLocationCoordinate2D, radiusMeters: Int) async throws -> AreaResponse {
+        try await get("api/area", coordinate: c, extra: [URLQueryItem(name: "radiusMeters", value: String(radiusMeters))])
     }
 
     private func get<T: Decodable>(_ path: String, coordinate c: CLLocationCoordinate2D, extra: [URLQueryItem]) async throws -> T {
@@ -125,9 +178,13 @@ struct ParkingAPI {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let body = try? JSONDecoder().decode(ErrorResponse.self, from: data)
+            if status == 404 { throw ParkingError.notFound }
             if status == 401 { throw ParkingError.server("The parking server rejected the API key. Check it in the Seattle Parking app.") }
             throw ParkingError.server(body?.speech ?? body?.error ?? "The parking server returned an error (\(status)).")
         }
         return try JSONDecoder().decode(T.self, from: data)
     }
 }
+
+extension Blockface { var displayStreet: String { streetLabel ?? street } }
+extension Spot { var displayStreet: String { streetLabel ?? street } }

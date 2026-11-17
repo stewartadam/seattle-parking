@@ -25,8 +25,8 @@ open SeattleParking.xcodeproj
 
 1. In Xcode, select the **SeattleParking** target, then go to **Signing & Capabilities**. Pick your team. The bundle ID is `com.github.stewartadam.seattleparking`; change it if you build under a different account.
 2. Plug in your iPhone, select it as the run destination, and press Run. If you haven't enabled Developer Mode on the phone, enable it under Settings › Privacy & Security.
-3. In the app, enter your server URL (for example `https://parking.example.com`) and your API key. The app has no default server. Add your RPZ permit zone if you have one. Tap **Allow location access** and choose **While Using the App**.
-4. Tap **Find parking** in the app to check that everything works, then try Siri.
+3. The app opens Settings on first launch. Enter your server URL (for example `https://parking.example.com`) and your API key, then tap **Test connection**. The app has no default server. Add your RPZ permit zone if you have one.
+4. Tap **Done**. Allow location access when asked (**While Using the App**). The main screen then shows the rules for the street you're on, and **Find parking** shows nearby spots on a map with walking directions. Then try Siri.
 
 Siri can take a minute after the first install to pick up the phrases. If Siri says it can't get your location, open the app once, or set Location to "Always" in Settings › Seattle Parking.
 

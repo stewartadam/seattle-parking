@@ -3,12 +3,12 @@ import SwiftUI
 
 /// "Hey Siri, find parking with Seattle Parking."
 ///
-/// Reads out the closest legal spots, then asks whether to start walking
+/// Reads out the closest legal spots, then asks whether to start driving
 /// directions to the closest one. That confirmation is the follow-up turn.
 struct FindParkingIntent: AppIntent {
     static let title: LocalizedStringResource = "Find Parking"
     static let description = IntentDescription(
-        "Finds the closest Seattle street parking you can legally use right now, then offers walking directions."
+        "Finds the closest Seattle street parking you can legally use right now, then offers driving directions."
     )
     static let openAppWhenRun = false
 
@@ -29,23 +29,24 @@ struct FindParkingIntent: AppIntent {
         let coordinate = try await LocationProvider.current()
         let answer = try await api.nearby(coordinate, minMinutes: minutes, freeOnly: freeOnly)
 
-        guard let closest = answer.results.first, let mapsURL = URL(string: closest.mapsUrl) else {
+        guard let closest = answer.results.first else {
             throw ParkingError.nothingNearby(answer.speech)
         }
         SpotStore.shared.save(answer.results)
 
         try await requestConfirmation(
             actionName: .go,
-            dialog: IntentDialog("\(answer.speech) Want walking directions to the closest one?")
+            dialog: IntentDialog("\(answer.speech) Want driving directions to the closest one?")
         ) {
-            SpotsSnippet(spots: answer.results)
+            SpotsSnippet(spots: answer.results, minutes: minutes)
         }
-        return .result(opensIntent: OpenURLIntent(mapsURL))
+        return .result(opensIntent: OpenURLIntent(closest.drivingDirectionsURL))
     }
 }
 
 struct SpotsSnippet: View {
     let spots: [Spot]
+    var minutes: Int? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -54,22 +55,18 @@ struct SpotsSnippet: View {
                     Text("\(index + 1)")
                         .font(.headline)
                         .frame(width: 24, height: 24)
-                        .background(Circle().fill(spot.freeNow ? Color.green.opacity(0.25) : Color.orange.opacity(0.25)))
+                        .background(Circle().fill(Color(spot.kind(filters: CurbFilters(stayingMinutes: minutes)).color).opacity(0.3)))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(spot.street).font(.subheadline.bold()).lineLimit(2)
+                        Text(spot.displayStreet).font(.subheadline.bold()).lineLimit(2)
                         Text(spot.summary).font(.subheadline)
-                        Text(distanceLabel(spot)).font(.caption).foregroundStyle(.secondary)
+                        if let schedule = spot.schedule {
+                            Text(schedule).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                        Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
         }
         .padding()
-    }
-
-    private func distanceLabel(_ spot: Spot) -> String {
-        let feet = Measurement(value: Double(spot.distanceMeters), unit: UnitLength.meters).converted(to: .feet).value
-        let distance = feet < 1000 ? "\(Int((feet / 50).rounded() * 50)) ft" : String(format: "%.1f mi", feet / 5280)
-        let side = spot.side.map { ", \($0) side" } ?? ""
-        return [distance, spot.direction].compactMap { $0 }.joined(separator: " ") + side
     }
 }

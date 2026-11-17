@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { describeHere, evaluateBlockface, findParking, formatDistance, formatStreet } from '../src/parking.js';
+import { describeArea, describeHere, evaluateBlockface, findParking, formatDistance, formatStreet, formatStreetLabel, blockfaceSchedule } from '../src/parking.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 
@@ -108,4 +108,99 @@ test('findParking returns legal spots sorted by distance and respects filters', 
 
   const long = await findParking({ lat: 47.6239, lon: -122.3145, minMinutes: 240, date, fetchImpl: fakeFetch });
   assert.ok(long.results.every((r) => r.timeLimitMinutes == null || r.timeLimitMinutes >= 240));
+});
+
+test('results include the curb line for drawing on a map', async () => {
+  const date = new Date('2026-10-06T17:00:00Z');
+  const here = await describeHere({ lat: 47.6239, lon: -122.3145, date, fetchImpl: fakeFetch });
+  const nearby = await findParking({ lat: 47.6239, lon: -122.3145, limit: 5, date, fetchImpl: fakeFetch });
+  for (const b of [...here.blockfaces, ...nearby.results]) {
+    assert.ok(b.path.length >= 2, `${b.street} has a curb line`);
+    for (const { lat, lon } of b.path) {
+      assert.ok(lat > 47.4 && lat < 47.8 && lon > -122.5 && lon < -122.2);
+    }
+  }
+});
+
+test('describeArea returns every blockface with its curb line and state', async () => {
+  const date = new Date('2026-10-06T17:00:00Z');
+  const area = await describeArea({ lat: 47.6239, lon: -122.3145, radiusMeters: 5000, date, fetchImpl: fakeFetch });
+  assert.equal(area.radiusMeters, 800);
+  const nearby = await findParking({ lat: 47.6239, lon: -122.3145, limit: 10, date, fetchImpl: fakeFetch });
+  assert.ok(area.blockfaces.length >= nearby.results.length);
+  assert.ok(area.blockfaces.some((b) => !b.canParkNow), 'includes blocks where you cannot park');
+  for (const b of area.blockfaces) {
+    assert.ok(b.path.length >= 2);
+    assert.equal(typeof b.canParkNow, 'boolean');
+    assert.equal(typeof b.freeNow, 'boolean');
+    assert.ok(b.timeLimitMinutes === null || Number.isInteger(b.timeLimitMinutes));
+  }
+});
+
+test('evaluateBlockface separates posted limits, upcoming restrictions and later parking', () => {
+  // Paid zone with a 2-hour limit: in effect at 9 AM, starts later at 7 AM.
+  const inHours = evaluateBlockface(paid, weekday(9 * 60));
+  assert.equal(inHours.postedLimitMinutes, 120);
+  assert.equal(inHours.restrictionInMinutes, null);
+  const early = evaluateBlockface(paid, weekday(7 * 60));
+  assert.equal(early.postedLimitMinutes, null);
+  assert.equal(early.restrictionInMinutes, 60);
+
+  // Unrestricted block with a 4-6 PM tow-away: free at 3 PM (restriction in an
+  // hour), no parking at 5 PM (parkable again in an hour).
+  const peak = { UNITDESC: 'E MERCER ST BETWEEN 10TH AVE E AND 11TH AVE E', SIDE: 'N', PARKING_CATEGORY: 'Unrestricted Parking', PEAK_HOUR: '4-6PM' };
+  const before = evaluateBlockface(peak, weekday(15 * 60));
+  assert.equal(before.canParkNow, true);
+  assert.equal(before.restrictionInMinutes, 60);
+  const during = evaluateBlockface(peak, weekday(17 * 60));
+  assert.equal(during.canParkNow, false);
+  assert.equal(during.parkableInMinutes, 60);
+
+  // No-parking blocks never become parkable.
+  const none = evaluateBlockface({ ...peak, PARKING_CATEGORY: 'No Parking Allowed', PEAK_HOUR: null }, weekday(12 * 60));
+  assert.equal(none.parkableInMinutes, null);
+});
+
+test('formatStreetLabel abbreviates for display', () => {
+  assert.equal(
+    formatStreetLabel('E LYNN ST BETWEEN YALE AVE E AND EASTLAKE AVE E'),
+    'E. Lynn St between Yale Ave E and Eastlake Ave E',
+  );
+  assert.equal(
+    formatStreetLabel('NW 64TH ST BETWEEN 15TH AVE NW AND 17TH AVE NW'),
+    'NW 64th St between 15th Ave NW and 17th Ave NW',
+  );
+  assert.equal(formatStreetLabel('BROADWAY E BETWEEN E OLIVE WAY AND E THOMAS ST'), 'Broadway E between E. Olive Way and E. Thomas St');
+  assert.equal(evaluateBlockface(paid, weekday(600)).streetLabel, 'Broadway E between E. Olive Way and E. Thomas St');
+});
+
+test('blockfaceSchedule says when the rules apply', () => {
+  assert.equal(
+    blockfaceSchedule({ ...paid, SAT_RATE1: 2, START_TIME_SAT: '08AM', END_TIME_SAT: '10PM', WKD_RATE2: 2.5 }),
+    '2-hour limit, paid Mon–Fri 8 AM–10 PM ($1–$2.50/hr), Sat 8 AM–10 PM ($2/hr); free Sun',
+  );
+  assert.equal(
+    blockfaceSchedule({ PARKING_CATEGORY: 'Paid Parking', PARKING_TIME_LIMIT: 240,
+      START_TIME_WKD: '08AM', END_TIME_WKD: '08PM', WKD_RATE1: 3,
+      START_TIME_SAT: '08AM', END_TIME_SAT: '08PM', SAT_RATE1: 3 }),
+    '4-hour limit, paid Mon–Sat 8 AM–8 PM ($3/hr); free Sun',
+  );
+  assert.equal(
+    blockfaceSchedule({ PARKING_CATEGORY: 'Time Limited Parking', PARKING_TIME_LIMIT: 120, PEAK_HOUR: '7-9AM' }),
+    '2-hour limit, hours not in city data, check the sign · no parking 7 AM–9 AM weekdays',
+  );
+  const rpzHours = new Map([['4', 'Monday-Saturday 7 AM to 6 PM']]);
+  assert.equal(
+    blockfaceSchedule({ PARKING_CATEGORY: 'Restricted Parking Zone', RPZ_ZONE: '4' }, { rpzHours }),
+    '2-hour limit without a zone 4 permit, Mon–Sat 7 AM–6 PM',
+  );
+  assert.equal(blockfaceSchedule({ PARKING_CATEGORY: 'Unrestricted Parking' }), null);
+});
+
+test('API answers include the schedule, with RPZ hours from the zone layer', async () => {
+  const date = new Date('2026-10-06T17:00:00Z');
+  const area = await describeArea({ lat: 47.6239, lon: -122.3145, radiusMeters: 300, date, fetchImpl: fakeFetch });
+  const rpz = area.blockfaces.find((b) => /zone 4 permit/.test(b.schedule ?? ''));
+  assert.ok(rpz, 'an RPZ block shows its zone hours');
+  assert.match(rpz.schedule, /Mon–Sat 7 AM–6 PM/);
 });

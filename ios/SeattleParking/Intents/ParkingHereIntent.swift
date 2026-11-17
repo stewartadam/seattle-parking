@@ -22,7 +22,7 @@ struct HereSnippet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let street = answer.blockfaces.first?.street {
+            if let street = answer.blockfaces.first?.displayStreet {
                 Text(street).font(.headline)
             }
             ForEach(answer.blockfaces, id: \.self) { b in
@@ -32,6 +32,9 @@ struct HereSnippet: View {
                     VStack(alignment: .leading) {
                         Text(b.side.map { "\($0.capitalized) side" } ?? "This side").font(.subheadline.bold())
                         Text(b.summary).font(.subheadline)
+                        if let schedule = b.schedule {
+                            Text(schedule).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }

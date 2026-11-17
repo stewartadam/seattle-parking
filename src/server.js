@@ -2,6 +2,7 @@
 //
 //   GET  /api/here      parking rules at ?lat=&lon= (or ?address=)
 //   GET  /api/nearby    nearest legal parking
+//   GET  /api/area      every blockface around ?lat=&lon= (for coloring a map)
 //        add ?format=text to either for a plain-text answer (handy for Siri Shortcuts)
 //   GET  /openapi.json  OpenAPI spec for a ChatGPT custom GPT Action
 //   POST /mcp           MCP (Streamable HTTP) endpoint for ChatGPT connectors / Claude
@@ -14,7 +15,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMcpServer } from './mcp.js';
 import { openApiSpec } from './openapi.js';
-import { UserError, nearestParking, parkingRulesHere } from './tools.js';
+import { UserError, nearestParking, parkingArea, parkingRulesHere } from './tools.js';
 
 const API_KEY = process.env.API_KEY || '';
 
@@ -91,6 +92,7 @@ export function createApp() {
       if (url.pathname === '/mcp') return await handleMcp(req, res);
       if (req.method === 'GET' && url.pathname === '/api/here') return await handleApi(parkingRulesHere, url, res);
       if (req.method === 'GET' && url.pathname === '/api/nearby') return await handleApi(nearestParking, url, res);
+      if (req.method === 'GET' && url.pathname === '/api/area') return await handleApi(parkingArea, url, res);
       return send(res, 404, { error: 'Not found' });
     } catch (err) {
       console.error(err);

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1F72E6"/>
+      <stop offset="1" stop-color="#0E43A6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- Space Needle -->
+  <g fill="#FFFFFF" stroke="#FFFFFF" stroke-linejoin="round" stroke-linecap="round">
+    <!-- spire -->
+    <path d="M736 92 L742 200 L730 200 Z" stroke-width="6"/>
+    <!-- roof cap and saucer -->
+    <path d="M712 214 L760 214 L766 232 L706 232 Z" stroke="none"/>
+    <path d="M700 236 L772 236 L880 282 L592 282 Z" stroke="none"/>
+    <rect x="584" y="282" width="304" height="24" rx="10" stroke="none"/>
+    <path d="M600 312 L872 312 L800 352 L672 352 Z" stroke="none"/>
+    <!-- legs: outer pair pinch at the waist and flare to the base -->
+    <path d="M682 352 L712 600 L646 910" fill="none" stroke-width="28"/>
+    <path d="M790 352 L760 600 L826 910" fill="none" stroke-width="28"/>
+    <!-- core -->
+    <path d="M736 352 L736 910" fill="none" stroke-width="16"/>
+    <!-- lower ring and base -->
+    <rect x="664" y="760" width="144" height="20" rx="8" stroke="none"/>
+    <rect x="610" y="910" width="252" height="22" rx="8" stroke="none"/>
+  </g>
+  <!-- aircraft light -->
+  <circle cx="736" cy="96" r="20" fill="#EA4335"/>
+
+  <!-- parking sign -->
+  <rect x="104" y="372" width="440" height="440" rx="96" fill="#FFFFFF"/>
+  <rect x="128" y="396" width="392" height="392" rx="76" fill="none" stroke="#1558C8" stroke-width="18"/>
+  <path transform="translate(0,-28)" d="M236 470 h100 c76 0 120 40 120 106 c0 66 -44 106 -120 106 h-36 v94 h-64 Z M300 526 v100 h32 c40 0 60 -18 60 -50 c0 -32 -20 -50 -60 -50 Z" fill="#1558C8" fill-rule="evenodd"/>
+</svg>
