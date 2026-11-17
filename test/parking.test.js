@@ -133,5 +133,6 @@ test('describeArea returns every blockface with its curb line and state', async 
     assert.ok(b.path.length >= 2);
     assert.equal(typeof b.canParkNow, 'boolean');
     assert.equal(typeof b.freeNow, 'boolean');
+    assert.ok(b.timeLimitMinutes === null || Number.isInteger(b.timeLimitMinutes));
   }
 });

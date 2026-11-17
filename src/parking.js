@@ -302,7 +302,10 @@ export async function describeArea({ lat, lon, radiusMeters = 300, permitZone, d
     .filter((b) => b.path.length >= 2)
     .map((b) => {
       const r = evaluateBlockface(b.attributes, now, { permitZone });
-      return { street: r.street, side: r.side, summary: r.summary, canParkNow: r.canParkNow, freeNow: r.freeNow, path: b.path };
+      return {
+        street: r.street, side: r.side, summary: r.summary, canParkNow: r.canParkNow, freeNow: r.freeNow,
+        timeLimitMinutes: r.timeLimitMinutes, path: b.path,
+      };
     });
   const open = blockfaces.filter((b) => b.canParkNow).length;
   return {
