@@ -68,7 +68,15 @@ final class AreaCurbs {
     private var visible: MKCoordinateRegion?
     private var zoomStep: Int?
     private var rebuildTask: Task<Void, Never>?
-    private var drawnKey: (ids: Int, step: Int)?
+    private var drawnKey: (ids: Int, step: Int, staying: Int?)?
+    private var stayingMinutes: Int?
+
+    /// The "Staying for" filter; recolors without refetching.
+    func setStayingMinutes(_ minutes: Int?) {
+        guard minutes != stayingMinutes else { return }
+        stayingMinutes = minutes
+        scheduleRebuild(delay: 0)
+    }
 
     /// Call when the camera settles (not continuously).
     func cameraSettled(region: MKCoordinateRegion, metersPerPoint: Double) {
@@ -154,35 +162,39 @@ final class AreaCurbs {
         guard let visible, let zoomStep else { return }
         let tiles = Array(cache.values)
         let bounds = visible.expanded(by: 1.5)
+        let staying = stayingMinutes
         rebuildTask = Task {
             if delay > 0 { try? await Task.sleep(for: .milliseconds(delay)) }
             guard !Task.isCancelled else { return }
             let (layers, idsHash) = await Task.detached(priority: .userInitiated) {
-                Self.buildLayers(tiles: tiles, bounds: bounds, step: zoomStep)
+                Self.buildLayers(tiles: tiles, bounds: bounds, step: zoomStep, staying: staying)
             }.value
             guard !Task.isCancelled else { return }
             // Same lines at the same zoom step: leave MapKit alone.
-            if let drawnKey, drawnKey.ids == idsHash, drawnKey.step == zoomStep { return }
-            drawnKey = (idsHash, zoomStep)
+            if let drawnKey, drawnKey.ids == idsHash, drawnKey.step == zoomStep, drawnKey.staying == staying { return }
+            drawnKey = (idsHash, zoomStep, staying)
             var next = layers
             next.version = self.layers.version + 1
             self.layers = next
         }
     }
 
-    nonisolated private static func buildLayers(tiles: [[AreaBlockface]], bounds: MKCoordinateRegion, step: Int) -> (AreaLayers, Int) {
+    nonisolated private static func buildLayers(tiles: [[AreaBlockface]], bounds: MKCoordinateRegion, step: Int, staying: Int?) -> (AreaLayers, Int) {
         let shift = CurbLine.shiftMeters(step: step)
         var seen = Set<String>()
-        var free: [[CLLocationCoordinate2D]] = [], paid: [[CLLocationCoordinate2D]] = [], none: [[CLLocationCoordinate2D]] = []
+        var lines: [CurbLine.Kind: [[CLLocationCoordinate2D]]] = [:]
         for blockfaces in tiles {
             for b in blockfaces where bounds.intersects(b.path) {
                 guard seen.insert(b.id).inserted else { continue }
                 let line = CurbLine.offset(b.path, side: b.side, meters: shift)
-                if !b.canParkNow { none.append(line) } else if b.freeNow { free.append(line) } else { paid.append(line) }
+                let kind = CurbLine.kind(canParkNow: b.canParkNow, freeNow: b.freeNow,
+                                         timeLimitMinutes: b.timeLimitMinutes, stayingMinutes: staying)
+                lines[kind, default: []].append(line)
             }
         }
         var layers = AreaLayers()
-        layers.groups = [(.systemRed, none), (.systemOrange, paid), (.systemGreen, free)]
+        // One MKMultiPolyline per color; later groups draw on top.
+        layers.groups = CurbLine.Kind.allCases.map { ($0.color, lines[$0] ?? []) }
         layers.width = CurbLine.areaWidth(step: step)
         return (layers, seen.hashValue)
     }
@@ -236,9 +248,34 @@ extension MKCoordinateRegion {
 // MARK: - Drawing
 
 enum CurbLine {
-    /// Green: free now. Orange: paid now. Red: no parking now.
-    static func color(canParkNow: Bool, freeNow: Bool) -> UIColor {
-        !canParkNow ? .systemRed : (freeNow ? .systemGreen : .systemOrange)
+    /// What a block side means for you right now.
+    enum Kind: Int, CaseIterable {
+        case noParking, timeLimited, paid, free
+
+        var color: UIColor {
+            switch self {
+            case .noParking: .systemRed
+            case .timeLimited: .systemYellow
+            case .paid: .systemOrange
+            case .free: .systemGreen
+            }
+        }
+        var label: String {
+            switch self {
+            case .noParking: "No parking"
+            case .timeLimited: "Time limit"
+            case .paid: "Paid"
+            case .free: "Free"
+            }
+        }
+    }
+
+    /// Red: can't park now. Yellow: time-limited, unless you chose how long
+    /// you're staying and the limit allows it. Orange: paid. Green: free.
+    static func kind(canParkNow: Bool, freeNow: Bool, timeLimitMinutes: Int?, stayingMinutes: Int?) -> Kind {
+        if !canParkNow { return .noParking }
+        if let limit = timeLimitMinutes, !(stayingMinutes.map { limit >= $0 } ?? false) { return .timeLimited }
+        return freeNow ? .free : .paid
     }
 
     /// Camera distance limits (meters above the map): the widest view is about
@@ -327,7 +364,7 @@ struct HighlightCurb {
 struct ResultPin {
     let index: Int
     let coordinate: CLLocationCoordinate2D
-    let freeNow: Bool
+    let color: UIColor
 }
 
 /// Where the map should move to. Changing `id` moves it, even to the same region.
@@ -424,7 +461,7 @@ struct CurbMapView: UIViewRepresentable {
             c.pruneStyles(keeping: c.areaOverlays + c.highlightOverlays)
         }
 
-        let pinsKey = pins.map { "\($0.index):\($0.coordinate.latitude),\($0.coordinate.longitude)" }.joined(separator: ";")
+        let pinsKey = pins.map { "\($0.index):\($0.coordinate.latitude),\($0.coordinate.longitude):\($0.color.hashValue)" }.joined(separator: ";")
         if pinsKey != c.pinsKey {
             c.pinsKey = pinsKey
             map.removeAnnotations(map.annotations.filter { $0 is ResultAnnotation })
@@ -491,7 +528,7 @@ struct CurbMapView: UIViewRepresentable {
             guard let result = annotation as? ResultAnnotation else { return nil }
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "pin", for: annotation) as! MKMarkerAnnotationView
             view.glyphText = "\(result.pin.index + 1)"
-            view.markerTintColor = result.pin.freeNow ? .systemGreen : .systemOrange
+            view.markerTintColor = result.pin.color
             view.titleVisibility = .hidden
             view.subtitleVisibility = .hidden
             view.displayPriority = .required
@@ -514,6 +551,30 @@ struct CurbMapView: UIViewRepresentable {
             let region = mapView.region, width = mapView.bounds.width
             DispatchQueue.main.async { self.parent.onRegionChange(region, width) }
         }
+    }
+}
+
+/// A one-line color key for the street colors.
+struct CurbLegend: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            ForEach(CurbLine.Kind.allCases.reversed(), id: \.self) { kind in
+                HStack(spacing: 4) {
+                    Capsule().fill(Color(kind.color)).frame(width: 14, height: 4)
+                    Text(kind.label)
+                }
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Street colors: green free, orange paid, yellow time limit, red no parking")
+    }
+}
+
+extension Spot {
+    func kind(stayingMinutes: Int?) -> CurbLine.Kind {
+        CurbLine.kind(canParkNow: true, freeNow: freeNow, timeLimitMinutes: timeLimitMinutes, stayingMinutes: stayingMinutes)
     }
 }
 
@@ -543,7 +604,9 @@ struct HereMap: View {
         let highlights = blockfaces.compactMap { b -> HighlightCurb? in
             guard let path = b.path, path.count >= 2 else { return nil }
             return HighlightCurb(coordinates: CurbLine.offset(path, side: b.side, meters: shift),
-                                 color: b.canParkNow ? .systemGreen : .systemRed, width: 5)
+                                 color: CurbLine.kind(canParkNow: b.canParkNow, freeNow: b.freeNow ?? true,
+                                                      timeLimitMinutes: b.timeLimitMinutes, stayingMinutes: nil).color,
+                                 width: 5)
         }
         CurbMapView(
             areaLayers: area.layers,

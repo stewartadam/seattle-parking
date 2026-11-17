@@ -25,6 +25,7 @@ struct BlockfaceRow: View {
 struct SpotRow: View {
     let rank: Int
     let spot: Spot
+    var kind: CurbLine.Kind? = nil
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -32,7 +33,7 @@ struct SpotRow: View {
             Text("\(rank)")
                 .font(.headline)
                 .frame(width: 28, height: 28)
-                .background(Circle().fill((spot.freeNow ? Color.green : Color.orange).opacity(0.25)))
+                .background(Circle().fill(Color((kind ?? spot.kind(stayingMinutes: nil)).color).opacity(0.3)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(spot.street).font(.subheadline.bold())
                 Text(spot.summary).font(.subheadline)

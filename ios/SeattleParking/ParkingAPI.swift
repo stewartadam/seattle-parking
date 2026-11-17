@@ -47,6 +47,8 @@ struct Blockface: Decodable, Hashable {
     let side: String?
     let summary: String
     let canParkNow: Bool
+    let freeNow: Bool?
+    let timeLimitMinutes: Int?
     let distanceMeters: Int?
     /// The curb line for this side of the block (newer servers only).
     let path: [Coordinate]?
@@ -91,6 +93,8 @@ struct AreaBlockface: Decodable, Hashable {
     let summary: String
     let canParkNow: Bool
     let freeNow: Bool
+    /// nil when there's no limit (or an older server that doesn't say).
+    let timeLimitMinutes: Int?
     let path: [Coordinate]
 }
 

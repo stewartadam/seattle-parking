@@ -38,7 +38,7 @@ struct FindParkingIntent: AppIntent {
             actionName: .go,
             dialog: IntentDialog("\(answer.speech) Want driving directions to the closest one?")
         ) {
-            SpotsSnippet(spots: answer.results)
+            SpotsSnippet(spots: answer.results, minutes: minutes)
         }
         return .result(opensIntent: OpenURLIntent(closest.drivingDirectionsURL))
     }
@@ -46,6 +46,7 @@ struct FindParkingIntent: AppIntent {
 
 struct SpotsSnippet: View {
     let spots: [Spot]
+    var minutes: Int? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -54,7 +55,7 @@ struct SpotsSnippet: View {
                     Text("\(index + 1)")
                         .font(.headline)
                         .frame(width: 24, height: 24)
-                        .background(Circle().fill(spot.freeNow ? Color.green.opacity(0.25) : Color.orange.opacity(0.25)))
+                        .background(Circle().fill(Color(spot.kind(stayingMinutes: minutes).color).opacity(0.3)))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(spot.street).font(.subheadline.bold()).lineLimit(2)
                         Text(spot.summary).font(.subheadline)
