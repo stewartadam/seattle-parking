@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { describeHere, evaluateBlockface, findParking, formatDistance, formatStreet } from '../src/parking.js';
+import { describeArea, describeHere, evaluateBlockface, findParking, formatDistance, formatStreet } from '../src/parking.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 
@@ -119,5 +119,19 @@ test('results include the curb line for drawing on a map', async () => {
     for (const { lat, lon } of b.path) {
       assert.ok(lat > 47.4 && lat < 47.8 && lon > -122.5 && lon < -122.2);
     }
+  }
+});
+
+test('describeArea returns every blockface with its curb line and state', async () => {
+  const date = new Date('2026-10-06T17:00:00Z');
+  const area = await describeArea({ lat: 47.6239, lon: -122.3145, radiusMeters: 5000, date, fetchImpl: fakeFetch });
+  assert.equal(area.radiusMeters, 800);
+  const nearby = await findParking({ lat: 47.6239, lon: -122.3145, limit: 10, date, fetchImpl: fakeFetch });
+  assert.ok(area.blockfaces.length >= nearby.results.length);
+  assert.ok(area.blockfaces.some((b) => !b.canParkNow), 'includes blocks where you cannot park');
+  for (const b of area.blockfaces) {
+    assert.ok(b.path.length >= 2);
+    assert.equal(typeof b.canParkNow, 'boolean');
+    assert.equal(typeof b.freeNow, 'boolean');
   }
 });

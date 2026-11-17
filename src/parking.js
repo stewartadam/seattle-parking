@@ -22,6 +22,8 @@ const RPZ_FIELDS = ['RPZ_ZONE', 'NAME', 'INEFFECT'];
 export const HERE_RADIUS_M = 60;
 export const DEFAULT_SEARCH_RADIUS_M = 500;
 export const MAX_SEARCH_RADIUS_M = 1500;
+export const MAX_AREA_RADIUS_M = 800;
+export const MAX_AREA_BLOCKFACES = 600;
 
 // ---------------------------------------------------------------------------
 // Formatting
@@ -284,6 +286,29 @@ export async function describeHere({ lat, lon, permitZone, date = new Date(), fe
     rpzZone: rpz,
     blockfaces: here,
     speech: speech.join(' '),
+  };
+}
+
+/**
+ * Every blockface around a point with whether you can park there now, for
+ * coloring a map. Unlike findParking, nothing is filtered or deduplicated.
+ */
+export async function describeArea({ lat, lon, radiusMeters = 300, permitZone, date = new Date(), fetchImpl = fetch }) {
+  const origin = { lat, lon };
+  const now = seattleTime(date);
+  const radius = Math.min(Math.max(radiusMeters, 50), MAX_AREA_RADIUS_M);
+  const blockfaces = (await nearbyBlockfaces(origin, radius, fetchImpl))
+    .slice(0, MAX_AREA_BLOCKFACES)
+    .filter((b) => b.path.length >= 2)
+    .map((b) => {
+      const r = evaluateBlockface(b.attributes, now, { permitZone });
+      return { street: r.street, side: r.side, summary: r.summary, canParkNow: r.canParkNow, freeNow: r.freeNow, path: b.path };
+    });
+  const open = blockfaces.filter((b) => b.canParkNow).length;
+  return {
+    speech: `${open} of ${blockfaces.length} block sides within ${formatDistance(radius).replace('about ', '')} allow parking right now.`,
+    radiusMeters: radius,
+    blockfaces,
   };
 }
 
