@@ -23,6 +23,8 @@ struct FindParkingView: View {
     @State private var selection: Int?
     @State private var area = AreaCurbs()
     @State private var mapWidth: CGFloat = 0
+    /// Quantized zoom, so result lines only shift when the zoom changes noticeably.
+    @State private var zoomStep: Int?
 
     /// The server searches at most 1.5 km from the center point.
     private static let maxRadiusMeters = 1500.0
@@ -33,6 +35,9 @@ struct FindParkingView: View {
             ZStack(alignment: .top) {
                 map
                 searchAreaButton
+            }
+            .overlay(alignment: .bottomLeading) {
+                if area.zoomedOutTooFar { ZoomInHint().allowsHitTesting(false) }
             }
             .frame(maxHeight: .infinity)
             results
@@ -79,12 +84,11 @@ struct FindParkingView: View {
     }
 
     private var map: some View {
-        let mpp = CurbLine.metersPerPoint(visibleRegion, width: mapWidth)
-        let shift = CurbLine.sideOffsetPoints * mpp
+        let shift = zoomStep.map(CurbLine.shiftMeters(step:)) ?? 0
         return Map(position: $position, selection: $selection) {
             UserAnnotation()
             // Every street in view, thin; the results draw on top.
-            AreaCurbsContent(blockfaces: area.blockfaces, metersPerPoint: mpp)
+            AreaCurbsContent(curbs: area.drawn, width: area.lineWidth)
             if case .loaded(let answer) = nearby {
                 // Curb lines first so the pins sit on top. The selected one gets a
                 // white outline and a heavier line.
@@ -111,7 +115,10 @@ struct FindParkingView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { mapWidth = $0 }
         .onMapCameraChange(frequency: .onEnd) { context in
             visibleRegion = context.region
-            area.update(for: context.region)
+            let mpp = CurbLine.metersPerPoint(context.region, width: mapWidth)
+            let step = CurbLine.zoomStep(mpp)
+            if step != zoomStep { zoomStep = step }
+            area.cameraSettled(region: context.region, metersPerPoint: mpp)
             if fittingResults {
                 fittingResults = false
                 searchedRegion = context.region
