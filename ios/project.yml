@@ -33,6 +33,13 @@ targets:
         NSLocationWhenInUseUsageDescription: >-
           Seattle Parking uses your location to look up the parking rules on
           the street you're on and the nearest places you can park.
+        # The phone UI stays SwiftUI's WindowGroup; this adds the CarPlay scene.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneConfigurationName: CarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.github.stewartadam.seattleparking
@@ -42,3 +49,9 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
+        # CarPlay needs Apple's com.apple.developer.carplay-parking entitlement.
+        # Simulator builds don't need a provisioning profile, so they always
+        # get it. For devices, uncomment the second line once Apple grants it
+        # to the team; until then signing would fail without it in the profile.
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": CarPlay.entitlements
+        # CODE_SIGN_ENTITLEMENTS: CarPlay.entitlements

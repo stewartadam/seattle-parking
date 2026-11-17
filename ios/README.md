@@ -31,3 +31,9 @@ open SeattleParking.xcodeproj
 Siri can take a minute after the first install to pick up the phrases. If Siri says it can't get your location, open the app once, or set Location to "Always" in Settings › Seattle Parking.
 
 The API key is stored in the app's preferences on the phone.
+
+## CarPlay
+
+On CarPlay the app shows Apple's parking map with up to 12 of the closest spots, pinned in the same colors as the phone's street map: green is free, yellow has restrictions, red is no parking. Choose a stay length with the button at the top left, and green-yellow then means the spot works for that stay. Tap a pin for its rules and a **Directions** button that opens Maps. **Search Here** searches wherever you've scrolled the map, and the location button searches around the car again.
+
+CarPlay apps need an entitlement that Apple grants by hand. Request the **Parking** category at <https://developer.apple.com/contact/carplay/>. Once it's granted, uncomment `CODE_SIGN_ENTITLEMENTS: CarPlay.entitlements` in `project.yml`, regenerate the project and rebuild. Until then the app runs on the phone as before but doesn't appear in the car. Simulator builds always include the entitlement, so you can try it now: run in the iOS Simulator and open **I/O › External Displays › CarPlay**.
