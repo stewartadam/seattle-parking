@@ -69,17 +69,40 @@ extension Optional where Wrapped == [Coordinate] {
 }
 
 extension Spot {
+    /// Halfway along this blockface's curb, for placing its pin; the closest
+    /// point (`coordinate`) when the server didn't send a curb line.
+    var zoneCenter: CLLocationCoordinate2D {
+        guard let path, path.count >= 2 else { return coordinate }
+        let cosLat = cos(path[0].lat * .pi / 180)
+        func length(_ a: Coordinate, _ b: Coordinate) -> Double {
+            hypot(b.lat - a.lat, (b.lon - a.lon) * cosLat)
+        }
+        let total = zip(path, path.dropFirst()).reduce(0) { $0 + length($1.0, $1.1) }
+        var remaining = total / 2
+        for (a, b) in zip(path, path.dropFirst()) {
+            let segment = length(a, b)
+            if segment >= remaining, segment > 0 {
+                let t = remaining / segment
+                return CLLocationCoordinate2D(latitude: a.lat + (b.lat - a.lat) * t, longitude: a.lon + (b.lon - a.lon) * t)
+            }
+            remaining -= segment
+        }
+        return coordinate
+    }
+
     var curbCoordinates: [CLLocationCoordinate2D]? { path.curbCoordinates }
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: point.lat, longitude: point.lon)
     }
 
-    /// Apple Maps driving directions to the spot. (The server's mapsUrl is walking.)
+    /// Apple Maps driving directions to the middle of the block side, where
+    /// its pin is. (The server's mapsUrl is walking, to the nearest point.)
     var drivingDirectionsURL: URL {
+        let target = zoneCenter
         var components = URLComponents(string: "https://maps.apple.com/")!
         components.queryItems = [
-            URLQueryItem(name: "daddr", value: "\(point.lat),\(point.lon)"),
+            URLQueryItem(name: "daddr", value: String(format: "%.6f,%.6f", target.latitude, target.longitude)),
             URLQueryItem(name: "dirflg", value: "d"),
         ]
         return components.url!

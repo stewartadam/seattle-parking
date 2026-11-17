@@ -89,7 +89,8 @@ struct FindParkingView: View {
         var pins: [ResultPin] = []
         if case .loaded(let answer) = nearby {
             for (index, spot) in answer.results.enumerated() {
-                pins.append(ResultPin(index: index, coordinate: spot.coordinate, freeNow: spot.freeNow))
+                // Pins sit halfway along their block side so neighbors overlap less.
+                pins.append(ResultPin(index: index, coordinate: spot.zoneCenter, freeNow: spot.freeNow))
                 guard let path = spot.path, path.count >= 2 else { continue }
                 highlights.append(HighlightCurb(
                     coordinates: CurbLine.offset(path, side: spot.side, meters: shift),
@@ -217,7 +218,7 @@ struct FindParkingView: View {
                 // Fit the user and the results only. (.automatic would also fit the
                 // street-color lines, which zoom the map out as they load.)
                 let points = [center] + answer.results.flatMap { spot in
-                    [spot.coordinate] + (spot.path ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+                    [spot.zoneCenter] + (spot.path ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
                 }
                 fittingResults = true
                 moveMap(to: MKCoordinateRegion.fitting(points, minimumMeters: 300))
