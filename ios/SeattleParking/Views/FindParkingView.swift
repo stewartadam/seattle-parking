@@ -19,6 +19,8 @@ struct FindParkingView: View {
     @State private var lastQueryRegion: MKCoordinateRegion?
     /// Set while the map zooms to fit fresh results, so that move isn't the user's.
     @State private var fittingResults = false
+    /// Index of the result picked on the map or in the list.
+    @State private var selection: Int?
 
     /// The server searches at most 1.5 km from the center point.
     private static let maxRadiusMeters = 1500.0
@@ -68,12 +70,13 @@ struct FindParkingView: View {
     }
 
     private var map: some View {
-        Map(position: $position) {
+        Map(position: $position, selection: $selection) {
             UserAnnotation()
             if case .loaded(let answer) = nearby {
                 ForEach(Array(answer.results.enumerated()), id: \.offset) { index, spot in
                     Marker(spot.street, monogram: Text("\(index + 1)"), coordinate: spot.coordinate)
                         .tint(spot.freeNow ? .green : .orange)
+                        .tag(index)
                 }
             }
         }
@@ -117,10 +120,19 @@ struct FindParkingView: View {
         case .loaded(let answer) where answer.results.isEmpty:
             ContentUnavailableView("No parking found", systemImage: "car", description: Text(answer.speech))
         case .loaded(let answer):
-            List(Array(answer.results.enumerated()), id: \.offset) { index, spot in
-                SpotRow(rank: index + 1, spot: spot)
+            ScrollViewReader { proxy in
+                List(Array(answer.results.enumerated()), id: \.offset) { index, spot in
+                    SpotRow(rank: index + 1, spot: spot)
+                        .contentShape(Rectangle())
+                        .onTapGesture { selection = index }
+                        .listRowBackground(selection == index ? Color.accentColor.opacity(0.15) : nil)
+                }
+                .listStyle(.plain)
+                .onChange(of: selection) {
+                    guard let selection else { return }
+                    withAnimation { proxy.scrollTo(selection, anchor: .center) }
+                }
             }
-            .listStyle(.plain)
         }
     }
 
@@ -153,6 +165,7 @@ struct FindParkingView: View {
                 radiusMeters: radius
             )
             SpotStore.shared.save(answer.results)
+            selection = nil
             nearby = .loaded(answer)
             lastQueryRegion = region
             searchedRegion = region ?? visibleRegion
