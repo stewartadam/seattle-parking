@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { describeArea, describeHere, evaluateBlockface, findParking, formatDistance, formatStreet, formatStreetLabel } from '../src/parking.js';
+import { describeArea, describeHere, evaluateBlockface, findParking, formatDistance, formatStreet, formatStreetLabel, blockfaceSchedule } from '../src/parking.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 
@@ -172,4 +172,35 @@ test('formatStreetLabel abbreviates for display', () => {
   );
   assert.equal(formatStreetLabel('BROADWAY E BETWEEN E OLIVE WAY AND E THOMAS ST'), 'Broadway E between E. Olive Way and E. Thomas St');
   assert.equal(evaluateBlockface(paid, weekday(600)).streetLabel, 'Broadway E between E. Olive Way and E. Thomas St');
+});
+
+test('blockfaceSchedule says when the rules apply', () => {
+  assert.equal(
+    blockfaceSchedule({ ...paid, SAT_RATE1: 2, START_TIME_SAT: '08AM', END_TIME_SAT: '10PM', WKD_RATE2: 2.5 }),
+    '2-hour limit, paid Mon–Fri 8 AM–10 PM ($1–$2.50/hr), Sat 8 AM–10 PM ($2/hr); free Sun',
+  );
+  assert.equal(
+    blockfaceSchedule({ PARKING_CATEGORY: 'Paid Parking', PARKING_TIME_LIMIT: 240,
+      START_TIME_WKD: '08AM', END_TIME_WKD: '08PM', WKD_RATE1: 3,
+      START_TIME_SAT: '08AM', END_TIME_SAT: '08PM', SAT_RATE1: 3 }),
+    '4-hour limit, paid Mon–Sat 8 AM–8 PM ($3/hr); free Sun',
+  );
+  assert.equal(
+    blockfaceSchedule({ PARKING_CATEGORY: 'Time Limited Parking', PARKING_TIME_LIMIT: 120, PEAK_HOUR: '7-9AM' }),
+    '2-hour limit, hours not in city data, check the sign · no parking 7 AM–9 AM weekdays',
+  );
+  const rpzHours = new Map([['4', 'Monday-Saturday 7 AM to 6 PM']]);
+  assert.equal(
+    blockfaceSchedule({ PARKING_CATEGORY: 'Restricted Parking Zone', RPZ_ZONE: '4' }, { rpzHours }),
+    '2-hour limit without a zone 4 permit, Mon–Sat 7 AM–6 PM',
+  );
+  assert.equal(blockfaceSchedule({ PARKING_CATEGORY: 'Unrestricted Parking' }), null);
+});
+
+test('API answers include the schedule, with RPZ hours from the zone layer', async () => {
+  const date = new Date('2026-10-06T17:00:00Z');
+  const area = await describeArea({ lat: 47.6239, lon: -122.3145, radiusMeters: 300, date, fetchImpl: fakeFetch });
+  const rpz = area.blockfaces.find((b) => /zone 4 permit/.test(b.schedule ?? ''));
+  assert.ok(rpz, 'an RPZ block shows its zone hours');
+  assert.match(rpz.schedule, /Mon–Sat 7 AM–6 PM/);
 });
