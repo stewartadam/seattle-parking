@@ -3,12 +3,12 @@ import SwiftUI
 
 /// "Hey Siri, find parking with Seattle Parking."
 ///
-/// Reads out the closest legal spots, then asks whether to start walking
+/// Reads out the closest legal spots, then asks whether to start driving
 /// directions to the closest one. That confirmation is the follow-up turn.
 struct FindParkingIntent: AppIntent {
     static let title: LocalizedStringResource = "Find Parking"
     static let description = IntentDescription(
-        "Finds the closest Seattle street parking you can legally use right now, then offers walking directions."
+        "Finds the closest Seattle street parking you can legally use right now, then offers driving directions."
     )
     static let openAppWhenRun = false
 
@@ -29,18 +29,18 @@ struct FindParkingIntent: AppIntent {
         let coordinate = try await LocationProvider.current()
         let answer = try await api.nearby(coordinate, minMinutes: minutes, freeOnly: freeOnly)
 
-        guard let closest = answer.results.first, let mapsURL = URL(string: closest.mapsUrl) else {
+        guard let closest = answer.results.first else {
             throw ParkingError.nothingNearby(answer.speech)
         }
         SpotStore.shared.save(answer.results)
 
         try await requestConfirmation(
             actionName: .go,
-            dialog: IntentDialog("\(answer.speech) Want walking directions to the closest one?")
+            dialog: IntentDialog("\(answer.speech) Want driving directions to the closest one?")
         ) {
             SpotsSnippet(spots: answer.results)
         }
-        return .result(opensIntent: OpenURLIntent(mapsURL))
+        return .result(opensIntent: OpenURLIntent(closest.drivingDirectionsURL))
     }
 }
 

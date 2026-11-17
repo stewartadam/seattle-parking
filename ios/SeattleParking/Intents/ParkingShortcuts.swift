@@ -30,7 +30,7 @@ struct ParkingShortcuts: AppShortcutsProvider {
                 "Directions to \(\.$spot) in \(.applicationName)",
             ],
             shortTitle: "Directions to Spot",
-            systemImageName: "figure.walk.circle"
+            systemImageName: "arrow.triangle.turn.up.right.circle"
         )
     }
 }

@@ -32,7 +32,7 @@ struct ParkingSpotEntity: AppEntity {
         id = rank
         street = spot.street
         summary = spot.summary
-        mapsURL = URL(string: spot.mapsUrl)
+        mapsURL = spot.drivingDirectionsURL
     }
 
     var displayRepresentation: DisplayRepresentation {
@@ -53,7 +53,7 @@ struct ParkingSpotQuery: EntityQuery {
 /// "Directions to parking spot 2 in Seattle Parking."
 struct DirectionsToSpotIntent: AppIntent {
     static let title: LocalizedStringResource = "Directions to Parking Spot"
-    static let description = IntentDescription("Opens walking directions to one of the spots from your last parking search.")
+    static let description = IntentDescription("Opens driving directions to one of the spots from your last parking search.")
 
     @Parameter(title: "Spot")
     var spot: ParkingSpotEntity

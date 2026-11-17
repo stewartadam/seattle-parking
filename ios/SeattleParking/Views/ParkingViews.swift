@@ -21,7 +21,7 @@ struct BlockfaceRow: View {
     }
 }
 
-/// A search result with a walking-directions button.
+/// A search result with a driving-directions button.
 struct SpotRow: View {
     let rank: Int
     let spot: Spot
@@ -39,41 +39,33 @@ struct SpotRow: View {
                 Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
-            if let url = URL(string: spot.mapsUrl) {
-                Button { openURL(url) } label: {
-                    Image(systemName: "figure.walk.circle.fill").font(.title)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Walking directions")
+            Button { openURL(spot.drivingDirectionsURL) } label: {
+                Label("Go", systemImage: "car.fill")
+                    .font(.subheadline.bold())
             }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .accessibilityLabel("Driving directions to \(spot.street)")
         }
         .padding(.vertical, 2)
     }
 }
 
-/// Search results as numbered pins: green is free right now, orange is paid.
-struct SpotsMap: View {
-    let spots: [Spot]
-
-    var body: some View {
-        Map(initialPosition: .automatic) {
-            UserAnnotation()
-            ForEach(Array(spots.enumerated()), id: \.offset) { index, spot in
-                Marker(
-                    spot.street,
-                    monogram: Text("\(index + 1)"),
-                    coordinate: CLLocationCoordinate2D(latitude: spot.point.lat, longitude: spot.point.lon)
-                )
-                .tint(spot.freeNow ? .green : .orange)
-            }
-        }
-        .mapControls { MapUserLocationButton() }
-        // A new search recreates the map so it zooms to fit the new pins.
-        .id(spots)
-    }
-}
-
 extension Spot {
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: point.lat, longitude: point.lon)
+    }
+
+    /// Apple Maps driving directions to the spot. (The server's mapsUrl is walking.)
+    var drivingDirectionsURL: URL {
+        var components = URLComponents(string: "https://maps.apple.com/")!
+        components.queryItems = [
+            URLQueryItem(name: "daddr", value: "\(point.lat),\(point.lon)"),
+            URLQueryItem(name: "dirflg", value: "d"),
+        ]
+        return components.url!
+    }
+
     /// "350 ft north, east side"
     var distanceLabel: String {
         let feet = Measurement(value: Double(distanceMeters), unit: UnitLength.meters).converted(to: .feet).value

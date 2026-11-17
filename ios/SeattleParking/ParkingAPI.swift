@@ -103,8 +103,9 @@ struct ParkingAPI {
         try await get("api/here", coordinate: c, extra: [])
     }
 
-    func nearby(_ c: CLLocationCoordinate2D, minMinutes: Int? = nil, freeOnly: Bool = false, limit: Int = 3) async throws -> NearbyResponse {
+    func nearby(_ c: CLLocationCoordinate2D, minMinutes: Int? = nil, freeOnly: Bool = false, limit: Int = 3, radiusMeters: Int? = nil) async throws -> NearbyResponse {
         var extra = [URLQueryItem(name: "limit", value: String(limit))]
+        if let radiusMeters { extra.append(URLQueryItem(name: "radiusMeters", value: String(radiusMeters))) }
         if let minMinutes { extra.append(URLQueryItem(name: "minMinutes", value: String(minMinutes))) }
         if freeOnly { extra.append(URLQueryItem(name: "freeOnly", value: "true")) }
         return try await get("api/nearby", coordinate: c, extra: extra)

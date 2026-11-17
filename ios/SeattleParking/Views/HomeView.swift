@@ -9,9 +9,6 @@ struct HomeView: View {
 
     @State private var showSettings = false
     @State private var here: Loadable<HereResponse> = .idle
-    @State private var nearby: Loadable<NearbyResponse> = .idle
-    @State private var minMinutes = 0
-    @State private var freeOnly = false
     @State private var locationManager = CLLocationManager()
 
     private var isConfigured: Bool {
@@ -119,42 +116,18 @@ struct HomeView: View {
 
     private var findSection: some View {
         Section {
-            Picker("Staying for", selection: $minMinutes) {
-                Text("Any time").tag(0)
-                Text("1 hour").tag(60)
-                Text("2 hours").tag(120)
-                Text("4 hours").tag(240)
+            NavigationLink {
+                FindParkingView()
+            } label: {
+                Label("Find parking nearby", systemImage: "magnifyingglass")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
             }
-            Toggle("Free only", isOn: $freeOnly)
-            Button { Task { await loadNearby() } } label: {
-                HStack {
-                    Label("Find parking", systemImage: "magnifyingglass")
-                    Spacer()
-                    if nearby.isLoading { ProgressView() }
-                }
-            }
-            .disabled(nearby.isLoading)
-
-            switch nearby {
-            case .idle, .loading:
-                EmptyView()
-            case .failed(let message):
-                Label(message, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.secondary)
-            case .loaded(let answer):
-                if answer.results.isEmpty {
-                    Text(answer.speech)
-                } else {
-                    SpotsMap(spots: answer.results)
-                        .frame(height: 220)
-                        .listRowInsets(EdgeInsets())
-                    ForEach(Array(answer.results.enumerated()), id: \.offset) { index, spot in
-                        SpotRow(rank: index + 1, spot: spot)
-                    }
-                }
-            }
-        } header: {
-            Text("Find parking nearby").textCase(nil).font(.headline)
+            .listRowBackground(Color.accentColor)
+        } footer: {
+            Text("Search around you, then pan the map to look somewhere else.")
         }
     }
 
@@ -166,7 +139,7 @@ struct HomeView: View {
         } header: {
             Text("Ask Siri").textCase(nil).font(.headline)
         } footer: {
-            Text("After finding parking, Siri offers walking directions to the closest spot.")
+            Text("After finding parking, Siri offers driving directions to the closest spot.")
         }
     }
 
@@ -181,24 +154,6 @@ struct HomeView: View {
             here = .loaded(try await api.here(coordinate))
         } catch {
             here = .failed(errorMessage(error))
-        }
-    }
-
-    private func loadNearby() async {
-        nearby = .loading
-        do {
-            let api = try ParkingAPI.fromSettings()
-            let coordinate = try await LocationProvider.current()
-            let answer = try await api.nearby(
-                coordinate,
-                minMinutes: minMinutes > 0 ? minMinutes : nil,
-                freeOnly: freeOnly,
-                limit: 5
-            )
-            SpotStore.shared.save(answer.results)
-            nearby = .loaded(answer)
-        } catch {
-            nearby = .failed(errorMessage(error))
         }
     }
 }
