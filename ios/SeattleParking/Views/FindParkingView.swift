@@ -9,7 +9,8 @@ struct FindParkingView: View {
     @State private var minMinutes = 0
     @State private var freeOnly = false
     @State private var nearby: Loadable<NearbyResponse> = .idle
-    @State private var position: MapCameraPosition = .userLocation(fallback: .region(.fitting([], minimumMeters: 0)))
+    /// Where the map should move to; set when a search starts and when results arrive.
+    @State private var focus: MapFocus?
     @State private var visibleRegion: MKCoordinateRegion?
     /// The region the current results were searched in; when the map moves away
     /// from it, the "Search this area" button appears.
@@ -22,7 +23,6 @@ struct FindParkingView: View {
     /// Index of the result picked on the map or in the list.
     @State private var selection: Int?
     @State private var area = AreaCurbs()
-    @State private var mapWidth: CGFloat = 0
     /// Quantized zoom, so result lines only shift when the zoom changes noticeably.
     @State private var zoomStep: Int?
 
@@ -85,52 +85,54 @@ struct FindParkingView: View {
 
     private var map: some View {
         let shift = zoomStep.map(CurbLine.shiftMeters(step:)) ?? 0
-        // The bounds stop the view growing past ~2 km: the street colors would
-        // otherwise mean loading most of the city.
-        return Map(position: $position,
-                   bounds: MapCameraBounds(minimumDistance: 150, maximumDistance: CurbLine.maxCameraDistance),
-                   selection: $selection) {
-            UserAnnotation()
-            // Every street in view, thin; the results draw on top.
-            AreaCurbsContent(curbs: area.drawn, width: area.lineWidth)
-            if case .loaded(let answer) = nearby {
-                // Curb lines first so the pins sit on top. The selected one gets a
-                // white outline and a heavier line.
-                ForEach(Array(answer.results.enumerated()), id: \.offset) { index, spot in
-                    if let path = spot.path, path.count >= 2 {
-                        let curb = CurbLine.offset(path, side: spot.side, meters: shift)
-                        if selection == index {
-                            MapPolyline(coordinates: curb).stroke(.white, style: CurbLine.style(width: 9))
-                        }
-                        MapPolyline(coordinates: curb)
-                            .stroke(spot.freeNow ? Color.green : Color.orange,
-                                    style: CurbLine.style(width: selection == index ? 6 : 4))
-                    }
-                }
-                ForEach(Array(answer.results.enumerated()), id: \.offset) { index, spot in
-                    Marker(spot.street, monogram: Text("\(index + 1)"), coordinate: spot.coordinate)
-                        .tint(spot.freeNow ? .green : .orange)
-                        .annotationTitles(.hidden)
-                        .tag(index)
-                }
+        var highlights: [HighlightCurb] = []
+        var pins: [ResultPin] = []
+        if case .loaded(let answer) = nearby {
+            for (index, spot) in answer.results.enumerated() {
+                pins.append(ResultPin(index: index, coordinate: spot.coordinate, freeNow: spot.freeNow))
+                guard let path = spot.path, path.count >= 2 else { continue }
+                highlights.append(HighlightCurb(
+                    coordinates: CurbLine.offset(path, side: spot.side, meters: shift),
+                    color: spot.freeNow ? .systemGreen : .systemOrange,
+                    width: selection == index ? 6 : 4,
+                    outlined: selection == index
+                ))
             }
         }
-        .mapControls { MapUserLocationButton() }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { mapWidth = $0 }
-        .onMapCameraChange(frequency: .onEnd) { context in
-            visibleRegion = context.region
-            let mpp = CurbLine.metersPerPoint(context.region, width: mapWidth)
-            let step = CurbLine.zoomStep(mpp)
-            if step != zoomStep { zoomStep = step }
-            area.cameraSettled(region: context.region, metersPerPoint: mpp)
-            if fittingResults {
-                fittingResults = false
-                searchedRegion = context.region
-                mapMoved = false
-            } else if let searchedRegion {
-                mapMoved = !context.region.isClose(to: searchedRegion)
-            }
+        var key = Hasher()
+        key.combine(pins.count)
+        for pin in pins { key.combine(pin.coordinate.latitude); key.combine(pin.coordinate.longitude) }
+        key.combine(selection)
+        key.combine(zoomStep)
+
+        return CurbMapView(
+            areaLayers: area.layers,
+            highlights: highlights,
+            highlightsKey: key.finalize(),
+            pins: pins,
+            selection: $selection,
+            focus: focus,
+            onRegionChange: { region, width in cameraSettled(region, width: width) }
+        )
+    }
+
+    private func cameraSettled(_ region: MKCoordinateRegion, width: CGFloat) {
+        visibleRegion = region
+        let mpp = CurbLine.metersPerPoint(region, width: width)
+        let step = CurbLine.zoomStep(mpp)
+        if step != zoomStep { zoomStep = step }
+        area.cameraSettled(region: region, metersPerPoint: mpp)
+        if fittingResults {
+            fittingResults = false
+            searchedRegion = region
+            mapMoved = false
+        } else if let searchedRegion {
+            mapMoved = !region.isClose(to: searchedRegion)
         }
+    }
+
+    private func moveMap(to region: MKCoordinateRegion) {
+        focus = MapFocus(id: (focus?.id ?? 0) + 1, region: region)
     }
 
     @ViewBuilder
@@ -196,6 +198,7 @@ struct FindParkingView: View {
                 radius = Int(min(max(halfDiagonal, 50), Self.maxRadiusMeters))
             } else {
                 center = try await LocationProvider.current()
+                if focus == nil { moveMap(to: MKCoordinateRegion(center: center, latitudinalMeters: 500, longitudinalMeters: 500)) }
             }
             let answer = try await api.nearby(
                 center,
@@ -217,7 +220,7 @@ struct FindParkingView: View {
                     [spot.coordinate] + (spot.path ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
                 }
                 fittingResults = true
-                withAnimation { position = .region(MKCoordinateRegion.fitting(points, minimumMeters: 300)) }
+                moveMap(to: MKCoordinateRegion.fitting(points, minimumMeters: 300))
                 try? await Task.sleep(for: .seconds(1.5))
                 fittingResults = false
             }

@@ -2,49 +2,43 @@ import CoreLocation
 import MapKit
 import Observation
 import SwiftUI
+import UIKit
 
-// MARK: - Every blockface in view
+// MARK: - Street colors for the visible map
 
-/// A curb line ready to draw: already shifted toward its side for the current
-/// zoom step, with a stable identity so SwiftUI updates instead of recreating it.
-struct DrawnCurb: Identifiable {
-    let id: String
-    let coordinates: [CLLocationCoordinate2D]
-    let color: Color
+/// Every street side's curb, grouped by color and ready to hand to MapKit as
+/// one MKMultiPolyline per color.
+struct AreaLayers {
+    var version = 0
+    var groups: [(color: UIColor, lines: [[CLLocationCoordinate2D]])] = []
+    var width: CGFloat = 3
+    var lineCount: Int { groups.reduce(0) { $0 + $1.lines.count } }
 }
 
 /// Loads every blockface in the visible map area from /api/area, so the map
 /// can color all the streets, not just the search results.
 ///
-/// The map is split into a fixed grid of tiles: 250 m when zoomed in, 500 m or
-/// 1 km when zoomed out, so a wide view needs only a few dozen requests. Each tile is fetched
-/// once (a circle query just covering it), cached, and only tiles in
-/// the view are loaded, nearest first, at most four at a time. A tile that hits the server's
-/// cap is split into four smaller tiles (repeatedly, down to 125 m).
+/// The map is split into a fixed grid of 250 m tiles. Each tile in view is
+/// fetched once (a circle query just covering it), nearest first, at most four
+/// at a time, and cached. A tile that hits the server's cap is split into four
+/// 125 m tiles. Lines are shifted and grouped off the main thread, and only
+/// rebuilt when tiles arrive or the zoom changes noticeably.
 @MainActor @Observable
 final class AreaCurbs {
-    /// What the map should draw right now.
-    private(set) var drawn: [DrawnCurb] = []
-    /// Stroke width for the current zoom.
-    private(set) var lineWidth: CGFloat = 3
+    /// What the map draws.
+    private(set) var layers = AreaLayers()
     /// True when the view spans more tiles than we load at once.
     private(set) var zoomedOutTooFar = false
 
-    // Grid: 250 m at Seattle's latitude.
     nonisolated private static let tileLat = 250.0 / 111_320
     nonisolated private static let tileLon = 250.0 / (111_320 * cos(47.62 * .pi / 180))
-    /// Most tiles loaded for one view; the tile size grows until the view fits.
-    private static let maxTiles = 40
-    /// Tile sizes: 250 m × 2^level. -1 is only used when splitting dense tiles.
-    private static let coarsestLevel = 2
-    private static let finestLevel = -1
+    private static let maxTiles = 36
     private static let maxConcurrent = 4
     /// /api/area returns at most 600 blockfaces; near that means "truncated".
     private static let serverCap = 580
-    private static let maxDrawn = 4000
 
     struct Tile: Hashable {
-        let level: Int  // tile edge = 250 m × 2^level (-1 = 125 m … 2 = 1 km)
+        let level: Int  // 0 = 250 m, -1 = 125 m (a quarter, for dense areas)
         let i: Int      // latitude index
         let j: Int      // longitude index
 
@@ -73,8 +67,8 @@ final class AreaCurbs {
 
     private var visible: MKCoordinateRegion?
     private var zoomStep: Int?
-    private var drawnIDs: Set<String> = []
     private var rebuildTask: Task<Void, Never>?
+    private var drawnKey: (ids: Int, step: Int)?
 
     /// Call when the camera settles (not continuously).
     func cameraSettled(region: MKCoordinateRegion, metersPerPoint: Double) {
@@ -82,50 +76,38 @@ final class AreaCurbs {
         let step = CurbLine.zoomStep(metersPerPoint)
         let stepChanged = step != zoomStep
         zoomStep = step
-        let width = CurbLine.areaWidth(step: step)
-        if width != lineWidth { lineWidth = width }
 
         let needed = tiles(covering: region)
         let tooFar = needed == nil
         if tooFar != zoomedOutTooFar { zoomedOutTooFar = tooFar }
 
-        // Stop loading tiles that are no longer near the view.
+        // Stop loading tiles that are no longer in view.
         let wanted = Set(needed ?? [])
         for (tile, task) in inFlight where !wanted.contains(tile) {
             task.cancel()
             inFlight[tile] = nil
         }
-        // Nearest tiles first.
         queue = (needed ?? []).filter { cache[$0] == nil && inFlight[$0] == nil }
             .sorted { distance($0.center, region.center) < distance($1.center, region.center) }
         pump()
-        rebuild(force: stepChanged)
+        scheduleRebuild(delay: stepChanged ? 0 : 150)
     }
 
-    /// Tiles intersecting the region at the finest size that keeps the count
-    /// within budget (split tiles replaced by their pieces), or nil if even
-    /// 1 km tiles would be too many.
     private func tiles(covering region: MKCoordinateRegion) -> [Tile]? {
         let lat0 = region.center.latitude - region.span.latitudeDelta / 2
         let lat1 = region.center.latitude + region.span.latitudeDelta / 2
         let lon0 = region.center.longitude - region.span.longitudeDelta / 2
         let lon1 = region.center.longitude + region.span.longitudeDelta / 2
-        for level in 0...Self.coarsestLevel {
-            let f = pow(2, Double(level))
-            let tLat = Self.tileLat * f, tLon = Self.tileLon * f
-            let i0 = Int(floor(lat0 / tLat)), i1 = Int(floor(lat1 / tLat))
-            let j0 = Int(floor(lon0 / tLon)), j1 = Int(floor(lon1 / tLon))
-            guard (i1 - i0 + 1) * (j1 - j0 + 1) <= Self.maxTiles else { continue }
-            var result: [Tile] = []
-            for i in i0...i1 {
-                for j in j0...j1 { expand(Tile(level: level, i: i, j: j), into: &result) }
-            }
-            return result
+        let i0 = Int(floor(lat0 / Self.tileLat)), i1 = Int(floor(lat1 / Self.tileLat))
+        let j0 = Int(floor(lon0 / Self.tileLon)), j1 = Int(floor(lon1 / Self.tileLon))
+        guard (i1 - i0 + 1) * (j1 - j0 + 1) <= Self.maxTiles else { return nil }
+        var result: [Tile] = []
+        for i in i0...i1 {
+            for j in j0...j1 { expand(Tile(level: 0, i: i, j: j), into: &result) }
         }
-        return nil
+        return result
     }
 
-    /// The tile itself, or its pieces if it was too dense to load whole.
     private func expand(_ tile: Tile, into result: inout [Tile]) {
         if split.contains(tile) {
             for child in tile.children { expand(child, into: &result) }
@@ -148,57 +130,61 @@ final class AreaCurbs {
             pump()
         }
         do {
+            // The request and JSON decoding run off the main thread.
             let api = try ParkingAPI.fromSettings()
             let answer = try await api.area(tile.center, radiusMeters: tile.radiusMeters)
             guard !Task.isCancelled else { return }
-            if tile.level > Self.finestLevel, answer.blockfaces.count >= Self.serverCap {
-                // Too dense for one query: load it as four smaller tiles.
+            if tile.level > -1, answer.blockfaces.count >= Self.serverCap {
                 split.insert(tile)
                 queue.insert(contentsOf: tile.children.filter { cache[$0] == nil }, at: 0)
             }
-            // Cache only after a successful fetch.
             cache[tile] = answer.blockfaces
-            scheduleRebuild()
+            scheduleRebuild(delay: 150)
         } catch ParkingError.notFound {
             unsupported = true
         } catch {
-            // Cancelled or a network hiccup: it'll be retried on the next camera change.
+            // Cancelled or a network hiccup: retried on the next camera change.
         }
     }
 
-    /// Coalesces redraws while several tiles arrive together.
-    private func scheduleRebuild() {
+    /// Coalesces rebuilds while several tiles arrive together, then shifts and
+    /// groups the lines on a background thread.
+    private func scheduleRebuild(delay: Int) {
         rebuildTask?.cancel()
+        guard let visible, let zoomStep else { return }
+        let tiles = Array(cache.values)
+        let bounds = visible.expanded(by: 1.5)
         rebuildTask = Task {
-            try? await Task.sleep(for: .milliseconds(80))
+            if delay > 0 { try? await Task.sleep(for: .milliseconds(delay)) }
             guard !Task.isCancelled else { return }
-            rebuild(force: false)
+            let (layers, idsHash) = await Task.detached(priority: .userInitiated) {
+                Self.buildLayers(tiles: tiles, bounds: bounds, step: zoomStep)
+            }.value
+            guard !Task.isCancelled else { return }
+            // Same lines at the same zoom step: leave MapKit alone.
+            if let drawnKey, drawnKey.ids == idsHash, drawnKey.step == zoomStep { return }
+            drawnKey = (idsHash, zoomStep)
+            var next = layers
+            next.version = self.layers.version + 1
+            self.layers = next
         }
     }
 
-    /// Recomputes the drawn lines: everything cached near the view, deduplicated
-    /// across tiles, shifted toward its side for the current zoom step.
-    private func rebuild(force: Bool) {
-        guard let visible, let zoomStep else { return }
-        let shift = CurbLine.shiftMeters(step: zoomStep)
-        let bounds = visible.expanded(by: 1.5)
-        var seen: Set<String> = []
-        var next: [DrawnCurb] = []
-        outer: for blockfaces in cache.values {
+    nonisolated private static func buildLayers(tiles: [[AreaBlockface]], bounds: MKCoordinateRegion, step: Int) -> (AreaLayers, Int) {
+        let shift = CurbLine.shiftMeters(step: step)
+        var seen = Set<String>()
+        var free: [[CLLocationCoordinate2D]] = [], paid: [[CLLocationCoordinate2D]] = [], none: [[CLLocationCoordinate2D]] = []
+        for blockfaces in tiles {
             for b in blockfaces where bounds.intersects(b.path) {
                 guard seen.insert(b.id).inserted else { continue }
-                next.append(DrawnCurb(
-                    id: b.id,
-                    coordinates: CurbLine.offset(b.path, side: b.side, meters: shift),
-                    color: CurbLine.color(canParkNow: b.canParkNow, freeNow: b.freeNow)
-                ))
-                if next.count >= Self.maxDrawn { break outer }
+                let line = CurbLine.offset(b.path, side: b.side, meters: shift)
+                if !b.canParkNow { none.append(line) } else if b.freeNow { free.append(line) } else { paid.append(line) }
             }
         }
-        // Same lines at the same zoom step: leave the overlays alone.
-        if !force && seen == drawnIDs { return }
-        drawnIDs = seen
-        drawn = next
+        var layers = AreaLayers()
+        layers.groups = [(.systemRed, none), (.systemOrange, paid), (.systemGreen, free)]
+        layers.width = CurbLine.areaWidth(step: step)
+        return (layers, seen.hashValue)
     }
 
     private func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
@@ -225,23 +211,40 @@ extension MKCoordinateRegion {
         let halfLat = span.latitudeDelta / 2, halfLon = span.longitudeDelta / 2
         return path.contains { abs($0.lat - center.latitude) <= halfLat && abs($0.lon - center.longitude) <= halfLon }
     }
+
+    /// A region around the points with some padding, at least `minimumMeters`
+    /// across. Falls back to central Seattle if there are no points.
+    static func fitting(_ points: [CLLocationCoordinate2D], minimumMeters: Double) -> MKCoordinateRegion {
+        guard let first = points.first else {
+            return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 47.6062, longitude: -122.3321),
+                                      latitudinalMeters: 800, longitudinalMeters: 800)
+        }
+        var minLat = first.latitude, maxLat = first.latitude, minLon = first.longitude, maxLon = first.longitude
+        for p in points {
+            minLat = min(minLat, p.latitude); maxLat = max(maxLat, p.latitude)
+            minLon = min(minLon, p.longitude); maxLon = max(maxLon, p.longitude)
+        }
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let minLatDelta = minimumMeters / 111_320
+        let minLonDelta = minimumMeters / (111_320 * cos(center.latitude * .pi / 180))
+        return MKCoordinateRegion(center: center, span: MKCoordinateSpan(
+            latitudeDelta: max((maxLat - minLat) * 1.3, minLatDelta),
+            longitudeDelta: max((maxLon - minLon) * 1.3, minLonDelta)))
+    }
 }
 
 // MARK: - Drawing
 
 enum CurbLine {
-    static func style(width: CGFloat) -> StrokeStyle {
-        StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
-    }
-
     /// Green: free now. Orange: paid now. Red: no parking now.
-    static func color(canParkNow: Bool, freeNow: Bool) -> Color {
-        !canParkNow ? .red : (freeNow ? .green : .orange)
+    static func color(canParkNow: Bool, freeNow: Bool) -> UIColor {
+        !canParkNow ? .systemRed : (freeNow ? .systemGreen : .systemOrange)
     }
 
-    /// Farthest the camera may zoom out (meters above the map), about a
-    /// 2 km wide view on a phone.
-    static let maxCameraDistance = 4_000.0
+    /// Camera distance limits (meters above the map): the widest view is about
+    /// 1 km across, so the street colors never mean loading half the city.
+    static let minCameraDistance = 150.0
+    static let maxCameraDistance = 1_900.0
 
     /// How far each side's line is pushed toward its curb, in screen points.
     static let sideOffsetPoints: CGFloat = 3
@@ -256,11 +259,11 @@ enum CurbLine {
         pow(2, Double(step) / 2)
     }
 
-    /// How far to push a line toward its side at this zoom. Zoomed far out the
-    /// two sides are only a couple of points apart anyway, so don't separate them.
+    /// How far to push a line toward its side at this zoom. Past roughly a
+    /// 600 m wide view the sides are drawn where they are.
     static func shiftMeters(step: Int) -> Double {
         let mpp = metersPerPoint(forStep: step)
-        return mpp > 4 ? 0 : sideOffsetPoints * mpp
+        return mpp > 1.6 ? 0 : sideOffsetPoints * mpp
     }
 
     /// Thin "every street" lines: about 3.5 pt up close, 2 pt across a
@@ -309,15 +312,207 @@ enum CurbLine {
     }()
 }
 
-/// Every street side in view, thin and colored by whether you can park.
-struct AreaCurbsContent: MapContent {
-    let curbs: [DrawnCurb]
-    var width: CGFloat = 3
+// MARK: - Map view
 
-    var body: some MapContent {
-        ForEach(curbs) { curb in
-            MapPolyline(coordinates: curb.coordinates)
-                .stroke(curb.color.opacity(0.85), style: CurbLine.style(width: width))
+/// A highlighted curb drawn above the street colors (a search result, or the
+/// block you're on).
+struct HighlightCurb {
+    let coordinates: [CLLocationCoordinate2D]
+    let color: UIColor
+    let width: CGFloat
+    var outlined = false
+}
+
+/// A numbered search-result pin.
+struct ResultPin {
+    let index: Int
+    let coordinate: CLLocationCoordinate2D
+    let freeNow: Bool
+}
+
+/// Where the map should move to. Changing `id` moves it, even to the same region.
+struct MapFocus: Equatable {
+    var id: Int
+    var region: MKCoordinateRegion
+    static func == (a: MapFocus, b: MapFocus) -> Bool { a.id == b.id }
+}
+
+/// MKMapView wrapper. SwiftUI's Map creates one overlay per line, which is too
+/// slow for hundreds of streets; here the street colors are three
+/// MKMultiPolylines (one per color) and only change when their data does.
+struct CurbMapView: UIViewRepresentable {
+    var areaLayers: AreaLayers
+    var highlights: [HighlightCurb] = []
+    /// Changes whenever `highlights` should be redrawn.
+    var highlightsKey: Int = 0
+    var pins: [ResultPin] = []
+    var selection: Binding<Int?> = .constant(nil)
+    var focus: MapFocus?
+    var interactive = true
+    var onRegionChange: (MKCoordinateRegion, CGFloat) -> Void = { _, _ in }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView()
+        map.delegate = context.coordinator
+        map.showsUserLocation = true
+        map.pointOfInterestFilter = .excludingAll
+        map.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "pin")
+        if let focus {
+            map.setRegion(focus.region, animated: false)
+            context.coordinator.focusID = focus.id
+        }
+        if interactive {
+            map.cameraZoomRange = MKMapView.CameraZoomRange(
+                minCenterCoordinateDistance: CurbLine.minCameraDistance,
+                maxCenterCoordinateDistance: CurbLine.maxCameraDistance)
+            map.isRotateEnabled = false
+            map.isPitchEnabled = false
+            let button = MKUserTrackingButton(mapView: map)
+            button.backgroundColor = .secondarySystemBackground
+            button.layer.cornerRadius = 8
+            button.translatesAutoresizingMaskIntoConstraints = false
+            map.addSubview(button)
+            NSLayoutConstraint.activate([
+                button.topAnchor.constraint(equalTo: map.safeAreaLayoutGuide.topAnchor, constant: 12),
+                button.trailingAnchor.constraint(equalTo: map.trailingAnchor, constant: -12),
+            ])
+        } else {
+            map.isScrollEnabled = false
+            map.isZoomEnabled = false
+            map.isRotateEnabled = false
+            map.isPitchEnabled = false
+        }
+        return map
+    }
+
+    func updateUIView(_ map: MKMapView, context: Context) {
+        let c = context.coordinator
+        c.parent = self
+
+        if areaLayers.version != c.areaVersion {
+            c.areaVersion = areaLayers.version
+            map.removeOverlays(c.areaOverlays)
+            c.areaOverlays = areaLayers.groups.compactMap { group in
+                guard !group.lines.isEmpty else { return nil }
+                let multi = MKMultiPolyline(group.lines.map { MKPolyline(coordinates: $0, count: $0.count) })
+                c.styles[ObjectIdentifier(multi)] = (group.color.withAlphaComponent(0.85), areaLayers.width)
+                return multi
+            }
+            // Below the highlights.
+            for (i, overlay) in c.areaOverlays.enumerated() { map.insertOverlay(overlay, at: i, level: .aboveRoads) }
+            c.pruneStyles(keeping: c.areaOverlays + c.highlightOverlays)
+        }
+
+        if highlightsKey != c.highlightsKey {
+            c.highlightsKey = highlightsKey
+            map.removeOverlays(c.highlightOverlays)
+            c.highlightOverlays = highlights.flatMap { h -> [MKOverlay] in
+                var lines: [MKOverlay] = []
+                if h.outlined {
+                    let outline = MKPolyline(coordinates: h.coordinates, count: h.coordinates.count)
+                    c.styles[ObjectIdentifier(outline)] = (.white, h.width + 3)
+                    lines.append(outline)
+                }
+                let line = MKPolyline(coordinates: h.coordinates, count: h.coordinates.count)
+                c.styles[ObjectIdentifier(line)] = (h.color, h.width)
+                lines.append(line)
+                return lines
+            }
+            map.addOverlays(c.highlightOverlays, level: .aboveRoads)
+            c.pruneStyles(keeping: c.areaOverlays + c.highlightOverlays)
+        }
+
+        let pinsKey = pins.map { "\($0.index):\($0.coordinate.latitude),\($0.coordinate.longitude)" }.joined(separator: ";")
+        if pinsKey != c.pinsKey {
+            c.pinsKey = pinsKey
+            map.removeAnnotations(map.annotations.filter { $0 is ResultAnnotation })
+            map.addAnnotations(pins.map(ResultAnnotation.init))
+        }
+
+        let selected = map.selectedAnnotations.compactMap { $0 as? ResultAnnotation }.first?.pin.index
+        if selected != selection.wrappedValue {
+            if let index = selection.wrappedValue,
+               let annotation = map.annotations.compactMap({ $0 as? ResultAnnotation }).first(where: { $0.pin.index == index }) {
+                map.selectAnnotation(annotation, animated: true)
+            } else {
+                for a in map.selectedAnnotations { map.deselectAnnotation(a, animated: true) }
+            }
+        }
+
+        if let focus, focus.id != c.focusID {
+            c.focusID = focus.id
+            map.setRegion(map.regionThatFits(focus.region), animated: true)
+        }
+    }
+
+    final class ResultAnnotation: NSObject, MKAnnotation {
+        let pin: ResultPin
+        var coordinate: CLLocationCoordinate2D { pin.coordinate }
+        init(_ pin: ResultPin) { self.pin = pin }
+    }
+
+    final class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: CurbMapView
+        var areaVersion = -1
+        var areaOverlays: [MKOverlay] = []
+        var highlightsKey = Int.min
+        var highlightOverlays: [MKOverlay] = []
+        var pinsKey = ""
+        var focusID: Int?
+        var styles: [ObjectIdentifier: (color: UIColor, width: CGFloat)] = [:]
+
+        init(_ parent: CurbMapView) { self.parent = parent }
+
+        func pruneStyles(keeping overlays: [MKOverlay]) {
+            let live = Set(overlays.map { ObjectIdentifier($0 as AnyObject) })
+            styles = styles.filter { live.contains($0.key) }
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            let style = styles[ObjectIdentifier(overlay as AnyObject)] ?? (.systemGray, 2)
+            let renderer: MKOverlayPathRenderer
+            if let multi = overlay as? MKMultiPolyline {
+                renderer = MKMultiPolylineRenderer(multiPolyline: multi)
+            } else if let line = overlay as? MKPolyline {
+                renderer = MKPolylineRenderer(polyline: line)
+            } else {
+                return MKOverlayRenderer(overlay: overlay)
+            }
+            renderer.strokeColor = style.color
+            renderer.lineWidth = style.width
+            renderer.lineCap = .round
+            renderer.lineJoin = .round
+            return renderer
+        }
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            guard let result = annotation as? ResultAnnotation else { return nil }
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: "pin", for: annotation) as! MKMarkerAnnotationView
+            view.glyphText = "\(result.pin.index + 1)"
+            view.markerTintColor = result.pin.freeNow ? .systemGreen : .systemOrange
+            view.titleVisibility = .hidden
+            view.subtitleVisibility = .hidden
+            view.displayPriority = .required
+            return view
+        }
+
+        func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
+            guard let result = annotation as? ResultAnnotation else { return }
+            DispatchQueue.main.async { self.parent.selection.wrappedValue = result.pin.index }
+        }
+
+        func mapView(_ mapView: MKMapView, didDeselect annotation: MKAnnotation) {
+            guard let result = annotation as? ResultAnnotation else { return }
+            DispatchQueue.main.async {
+                if self.parent.selection.wrappedValue == result.pin.index { self.parent.selection.wrappedValue = nil }
+            }
+        }
+
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            let region = mapView.region, width = mapView.bounds.width
+            DispatchQueue.main.async { self.parent.onRegionChange(region, width) }
         }
     }
 }
@@ -342,57 +537,34 @@ struct HereMap: View {
     let blockfaces: [Blockface]
     @State private var area = AreaCurbs()
     @State private var zoomStep: Int?
-    @State private var width: CGFloat = 0
 
     var body: some View {
         let shift = zoomStep.map(CurbLine.shiftMeters(step:)) ?? 0
-        // Frame the block you're on. (.automatic would also fit the street-color
-        // lines, and the map would keep zooming out as they load.)
-        Map(initialPosition: .region(hereRegion), interactionModes: []) {
-            UserAnnotation()
-            AreaCurbsContent(curbs: area.drawn, width: area.lineWidth)
-            ForEach(Array(blockfaces.enumerated()), id: \.offset) { _, b in
-                if let path = b.path, path.count >= 2 {
-                    MapPolyline(coordinates: CurbLine.offset(path, side: b.side, meters: shift))
-                        .stroke(b.canParkNow ? Color.green : Color.red, style: CurbLine.style(width: 5))
-                }
+        let highlights = blockfaces.compactMap { b -> HighlightCurb? in
+            guard let path = b.path, path.count >= 2 else { return nil }
+            return HighlightCurb(coordinates: CurbLine.offset(path, side: b.side, meters: shift),
+                                 color: b.canParkNow ? .systemGreen : .systemRed, width: 5)
+        }
+        CurbMapView(
+            areaLayers: area.layers,
+            highlights: highlights,
+            highlightsKey: zoomStep ?? 0,
+            focus: MapFocus(id: 0, region: hereRegion),
+            interactive: false,
+            onRegionChange: { region, width in
+                let mpp = CurbLine.metersPerPoint(region, width: width)
+                let step = CurbLine.zoomStep(mpp)
+                if step != zoomStep { zoomStep = step }
+                area.cameraSettled(region: region, metersPerPoint: mpp)
             }
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .onMapCameraChange(frequency: .onEnd) { context in
-            let mpp = CurbLine.metersPerPoint(context.region, width: width)
-            let step = CurbLine.zoomStep(mpp)
-            if step != zoomStep { zoomStep = step }
-            area.cameraSettled(region: context.region, metersPerPoint: mpp)
-        }
-        // New data recreates the map so it fits the new lines.
+        )
+        // New data recreates the map so it frames the new block.
         .id(blockfaces)
     }
 
+    /// Frames the block you're on (at least 250 m across).
     private var hereRegion: MKCoordinateRegion {
         let points = blockfaces.flatMap { ($0.path ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) } }
         return MKCoordinateRegion.fitting(points, minimumMeters: 250)
-    }
-}
-
-extension MKCoordinateRegion {
-    /// A region around the points with some padding, at least `minimumMeters`
-    /// across. Falls back to central Seattle if there are no points.
-    static func fitting(_ points: [CLLocationCoordinate2D], minimumMeters: Double) -> MKCoordinateRegion {
-        guard let first = points.first else {
-            return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 47.6062, longitude: -122.3321),
-                                      latitudinalMeters: 2_000, longitudinalMeters: 2_000)
-        }
-        var minLat = first.latitude, maxLat = first.latitude, minLon = first.longitude, maxLon = first.longitude
-        for p in points {
-            minLat = min(minLat, p.latitude); maxLat = max(maxLat, p.latitude)
-            minLon = min(minLon, p.longitude); maxLon = max(maxLon, p.longitude)
-        }
-        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
-        let minLatDelta = minimumMeters / 111_320
-        let minLonDelta = minimumMeters / (111_320 * cos(center.latitude * .pi / 180))
-        return MKCoordinateRegion(center: center, span: MKCoordinateSpan(
-            latitudeDelta: max((maxLat - minLat) * 1.3, minLatDelta),
-            longitudeDelta: max((maxLon - minLon) * 1.3, minLonDelta)))
     }
 }
