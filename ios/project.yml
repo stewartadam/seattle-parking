@@ -22,9 +22,14 @@ targets:
       path: SeattleParking/Info.plist
       properties:
         CFBundleDisplayName: Seattle Parking
+        # Use the build settings below instead of XcodeGen's default "1.0"/"1".
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        # Only standard HTTPS: skips the export-compliance question per upload.
+        ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: >-
           Seattle Parking uses your location to look up the parking rules on
           the street you're on and the nearest places you can park.
