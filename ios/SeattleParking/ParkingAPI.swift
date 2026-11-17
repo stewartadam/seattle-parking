@@ -14,6 +14,8 @@ enum ParkingError: Error, CustomLocalizedStringResourceConvertible {
     case noLocation
     case server(String)
     case nothingNearby(String)
+    /// The server doesn't have this endpoint (an older deployment).
+    case notFound
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
@@ -27,6 +29,8 @@ enum ParkingError: Error, CustomLocalizedStringResourceConvertible {
             return "\(message)"
         case .nothingNearby(let speech):
             return "\(speech)"
+        case .notFound:
+            return "The parking server doesn't support this yet."
         }
     }
 }
@@ -80,6 +84,20 @@ struct NearbyResponse: Decodable {
     let results: [Spot]
 }
 
+/// One side of one block, for coloring a map (/api/area).
+struct AreaBlockface: Decodable, Hashable {
+    let street: String
+    let side: String?
+    let summary: String
+    let canParkNow: Bool
+    let freeNow: Bool
+    let path: [Coordinate]
+}
+
+struct AreaResponse: Decodable {
+    let blockfaces: [AreaBlockface]
+}
+
 private struct ErrorResponse: Decodable {
     let error: String?
     let speech: String?
@@ -115,6 +133,10 @@ struct ParkingAPI {
         return try await get("api/nearby", coordinate: c, extra: extra)
     }
 
+    func area(_ c: CLLocationCoordinate2D, radiusMeters: Int) async throws -> AreaResponse {
+        try await get("api/area", coordinate: c, extra: [URLQueryItem(name: "radiusMeters", value: String(radiusMeters))])
+    }
+
     private func get<T: Decodable>(_ path: String, coordinate c: CLLocationCoordinate2D, extra: [URLQueryItem]) async throws -> T {
         var components = URLComponents(url: baseURL.appending(path: path), resolvingAgainstBaseURL: false)!
         var items = [
@@ -130,6 +152,7 @@ struct ParkingAPI {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let body = try? JSONDecoder().decode(ErrorResponse.self, from: data)
+            if status == 404 { throw ParkingError.notFound }
             if status == 401 { throw ParkingError.server("The parking server rejected the API key. Check it in the Seattle Parking app.") }
             throw ParkingError.server(body?.speech ?? body?.error ?? "The parking server returned an error (\(status)).")
         }

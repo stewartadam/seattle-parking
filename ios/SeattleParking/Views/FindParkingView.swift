@@ -21,6 +21,8 @@ struct FindParkingView: View {
     @State private var fittingResults = false
     /// Index of the result picked on the map or in the list.
     @State private var selection: Int?
+    @State private var area = AreaCurbs()
+    @State private var mapWidth: CGFloat = 0
 
     /// The server searches at most 1.5 km from the center point.
     private static let maxRadiusMeters = 1500.0
@@ -77,19 +79,24 @@ struct FindParkingView: View {
     }
 
     private var map: some View {
-        Map(position: $position, selection: $selection) {
+        let mpp = CurbLine.metersPerPoint(visibleRegion, width: mapWidth)
+        let shift = CurbLine.sideOffsetPoints * mpp
+        return Map(position: $position, selection: $selection) {
             UserAnnotation()
+            // Every street in view, thin; the results draw on top.
+            AreaCurbsContent(blockfaces: area.blockfaces, metersPerPoint: mpp)
             if case .loaded(let answer) = nearby {
                 // Curb lines first so the pins sit on top. The selected one gets a
                 // white outline and a heavier line.
                 ForEach(Array(answer.results.enumerated()), id: \.offset) { index, spot in
-                    if let curb = spot.curbCoordinates {
+                    if let path = spot.path, path.count >= 2 {
+                        let curb = CurbLine.offset(path, side: spot.side, meters: shift)
                         if selection == index {
-                            MapPolyline(coordinates: curb).stroke(.white, style: CurbLine.style(width: 12))
+                            MapPolyline(coordinates: curb).stroke(.white, style: CurbLine.style(width: 9))
                         }
                         MapPolyline(coordinates: curb)
                             .stroke(spot.freeNow ? Color.green : Color.orange,
-                                    style: CurbLine.style(width: selection == index ? 8 : 5))
+                                    style: CurbLine.style(width: selection == index ? 6 : 4))
                     }
                 }
                 ForEach(Array(answer.results.enumerated()), id: \.offset) { index, spot in
@@ -101,8 +108,10 @@ struct FindParkingView: View {
             }
         }
         .mapControls { MapUserLocationButton() }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { mapWidth = $0 }
         .onMapCameraChange(frequency: .onEnd) { context in
             visibleRegion = context.region
+            area.update(for: context.region)
             if fittingResults {
                 fittingResults = false
                 searchedRegion = context.region

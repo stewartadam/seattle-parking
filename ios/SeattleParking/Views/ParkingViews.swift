@@ -56,33 +56,6 @@ struct SpotRow: View {
     }
 }
 
-/// Drawing style shared by curb-line overlays.
-enum CurbLine {
-    static func style(width: CGFloat) -> StrokeStyle {
-        StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
-    }
-}
-
-/// The blocks you're on, drawn as their curb lines: green where you can park
-/// now, red where you can't.
-struct HereMap: View {
-    let blockfaces: [Blockface]
-
-    var body: some View {
-        Map(initialPosition: .automatic, interactionModes: []) {
-            UserAnnotation()
-            ForEach(Array(blockfaces.enumerated()), id: \.offset) { _, blockface in
-                if let curb = blockface.curbCoordinates {
-                    MapPolyline(coordinates: curb)
-                        .stroke(blockface.canParkNow ? Color.green : Color.red, style: CurbLine.style(width: 6))
-                }
-            }
-        }
-        // New data recreates the map so it fits the new lines.
-        .id(blockfaces)
-    }
-}
-
 extension Blockface {
     var curbCoordinates: [CLLocationCoordinate2D]? { path.curbCoordinates }
 }
