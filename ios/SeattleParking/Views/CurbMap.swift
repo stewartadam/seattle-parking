@@ -239,6 +239,10 @@ enum CurbLine {
         !canParkNow ? .red : (freeNow ? .green : .orange)
     }
 
+    /// Farthest the camera may zoom out (meters above the map), about a
+    /// 2 km wide view on a phone.
+    static let maxCameraDistance = 4_000.0
+
     /// How far each side's line is pushed toward its curb, in screen points.
     static let sideOffsetPoints: CGFloat = 3
 
@@ -342,7 +346,9 @@ struct HereMap: View {
 
     var body: some View {
         let shift = zoomStep.map(CurbLine.shiftMeters(step:)) ?? 0
-        Map(initialPosition: .automatic, interactionModes: []) {
+        // Frame the block you're on. (.automatic would also fit the street-color
+        // lines, and the map would keep zooming out as they load.)
+        Map(initialPosition: .region(hereRegion), interactionModes: []) {
             UserAnnotation()
             AreaCurbsContent(curbs: area.drawn, width: area.lineWidth)
             ForEach(Array(blockfaces.enumerated()), id: \.offset) { _, b in
@@ -361,5 +367,32 @@ struct HereMap: View {
         }
         // New data recreates the map so it fits the new lines.
         .id(blockfaces)
+    }
+
+    private var hereRegion: MKCoordinateRegion {
+        let points = blockfaces.flatMap { ($0.path ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) } }
+        return MKCoordinateRegion.fitting(points, minimumMeters: 250)
+    }
+}
+
+extension MKCoordinateRegion {
+    /// A region around the points with some padding, at least `minimumMeters`
+    /// across. Falls back to central Seattle if there are no points.
+    static func fitting(_ points: [CLLocationCoordinate2D], minimumMeters: Double) -> MKCoordinateRegion {
+        guard let first = points.first else {
+            return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 47.6062, longitude: -122.3321),
+                                      latitudinalMeters: 2_000, longitudinalMeters: 2_000)
+        }
+        var minLat = first.latitude, maxLat = first.latitude, minLon = first.longitude, maxLon = first.longitude
+        for p in points {
+            minLat = min(minLat, p.latitude); maxLat = max(maxLat, p.latitude)
+            minLon = min(minLon, p.longitude); maxLon = max(maxLon, p.longitude)
+        }
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let minLatDelta = minimumMeters / 111_320
+        let minLonDelta = minimumMeters / (111_320 * cos(center.latitude * .pi / 180))
+        return MKCoordinateRegion(center: center, span: MKCoordinateSpan(
+            latitudeDelta: max((maxLat - minLat) * 1.3, minLatDelta),
+            longitudeDelta: max((maxLon - minLon) * 1.3, minLonDelta)))
     }
 }

@@ -9,7 +9,7 @@ struct FindParkingView: View {
     @State private var minMinutes = 0
     @State private var freeOnly = false
     @State private var nearby: Loadable<NearbyResponse> = .idle
-    @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
+    @State private var position: MapCameraPosition = .userLocation(fallback: .region(.fitting([], minimumMeters: 0)))
     @State private var visibleRegion: MKCoordinateRegion?
     /// The region the current results were searched in; when the map moves away
     /// from it, the "Search this area" button appears.
@@ -85,7 +85,11 @@ struct FindParkingView: View {
 
     private var map: some View {
         let shift = zoomStep.map(CurbLine.shiftMeters(step:)) ?? 0
-        return Map(position: $position, selection: $selection) {
+        // The bounds stop the view growing past ~2 km: the street colors would
+        // otherwise mean loading most of the city.
+        return Map(position: $position,
+                   bounds: MapCameraBounds(minimumDistance: 150, maximumDistance: CurbLine.maxCameraDistance),
+                   selection: $selection) {
             UserAnnotation()
             // Every street in view, thin; the results draw on top.
             AreaCurbsContent(curbs: area.drawn, width: area.lineWidth)
@@ -207,9 +211,13 @@ struct FindParkingView: View {
             searchedRegion = region ?? visibleRegion
             mapMoved = false
             if region == nil, !answer.results.isEmpty {
-                // Fit the user and the pins; the camera callback records the fitted region.
+                // Fit the user and the results only. (.automatic would also fit the
+                // street-color lines, which zoom the map out as they load.)
+                let points = [center] + answer.results.flatMap { spot in
+                    [spot.coordinate] + (spot.path ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+                }
                 fittingResults = true
-                withAnimation { position = .automatic }
+                withAnimation { position = .region(MKCoordinateRegion.fitting(points, minimumMeters: 300)) }
                 try? await Task.sleep(for: .seconds(1.5))
                 fittingResults = false
             }
