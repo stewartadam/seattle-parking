@@ -136,3 +136,27 @@ test('describeArea returns every blockface with its curb line and state', async 
     assert.ok(b.timeLimitMinutes === null || Number.isInteger(b.timeLimitMinutes));
   }
 });
+
+test('evaluateBlockface separates posted limits, upcoming restrictions and later parking', () => {
+  // Paid zone with a 2-hour limit: in effect at 9 AM, starts later at 7 AM.
+  const inHours = evaluateBlockface(paid, weekday(9 * 60));
+  assert.equal(inHours.postedLimitMinutes, 120);
+  assert.equal(inHours.restrictionInMinutes, null);
+  const early = evaluateBlockface(paid, weekday(7 * 60));
+  assert.equal(early.postedLimitMinutes, null);
+  assert.equal(early.restrictionInMinutes, 60);
+
+  // Unrestricted block with a 4-6 PM tow-away: free at 3 PM (restriction in an
+  // hour), no parking at 5 PM (parkable again in an hour).
+  const peak = { UNITDESC: 'E MERCER ST BETWEEN 10TH AVE E AND 11TH AVE E', SIDE: 'N', PARKING_CATEGORY: 'Unrestricted Parking', PEAK_HOUR: '4-6PM' };
+  const before = evaluateBlockface(peak, weekday(15 * 60));
+  assert.equal(before.canParkNow, true);
+  assert.equal(before.restrictionInMinutes, 60);
+  const during = evaluateBlockface(peak, weekday(17 * 60));
+  assert.equal(during.canParkNow, false);
+  assert.equal(during.parkableInMinutes, 60);
+
+  // No-parking blocks never become parkable.
+  const none = evaluateBlockface({ ...peak, PARKING_CATEGORY: 'No Parking Allowed', PEAK_HOUR: null }, weekday(12 * 60));
+  assert.equal(none.parkableInMinutes, null);
+});

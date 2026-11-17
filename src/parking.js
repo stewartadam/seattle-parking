@@ -100,6 +100,11 @@ export function evaluateBlockface(a, now, { permitZone } = {}) {
     freeNow: true,
     ratePerHour: null,
     timeLimitMinutes: null,
+    // Finer detail for map coloring. timeLimitMinutes (above) folds these
+    // together as "how long you can stay from now".
+    postedLimitMinutes: null, // a posted time limit in effect right now
+    restrictionInMinutes: null, // free and unrestricted now, but a restriction starts later today
+    parkableInMinutes: null, // can't park now, but can later today
     rpzZone: a.RPZ_ZONE ?? null,
     peakHourNoParking: a.PEAK_HOUR ?? null,
     spaces: a.PARKING_SPACES ?? null,
@@ -128,12 +133,14 @@ export function evaluateBlockface(a, now, { permitZone } = {}) {
         r.freeNow = !rate;
         r.ratePerHour = rate || null;
         r.timeLimitMinutes = limit;
+        r.postedLimitMinutes = limit;
         r.summary = [
           rate ? `paid, ${formatRate(rate)} until ${formatClock(hours.end)}` : `paid parking until ${formatClock(hours.end)}`,
           limit && `${formatLimit(limit)} limit`,
         ].filter(Boolean).join(', ');
       } else if (now.minutes < hours.start) {
         r.timeLimitMinutes = hours.start - now.minutes;
+        r.restrictionInMinutes = hours.start - now.minutes;
         r.summary = `free until ${formatClock(hours.start)}, then paid`;
       } else {
         r.summary = `free now, paid parking ended at ${formatClock(hours.end)}`;
@@ -145,6 +152,7 @@ export function evaluateBlockface(a, now, { permitZone } = {}) {
     case 'Time Limited Parking':
       r.canParkNow = true;
       r.timeLimitMinutes = limit;
+      r.postedLimitMinutes = limit;
       r.summary = limit ? `free, ${formatLimit(limit)} limit` : 'free, time limited';
       r.notes.push('Check the posted sign for the hours the time limit applies.');
       break;
@@ -159,9 +167,13 @@ export function evaluateBlockface(a, now, { permitZone } = {}) {
       const hours = enforcementHours(a, now);
       if (hours && !(now.minutes >= hours.start && now.minutes < hours.end)) {
         r.summary = `free, ${zone} permit rules not in effect right now`;
-        if (now.minutes < hours.start) r.timeLimitMinutes = hours.start - now.minutes + (limit ?? 0);
+        if (now.minutes < hours.start) {
+          r.timeLimitMinutes = hours.start - now.minutes + (limit ?? 0);
+          r.restrictionInMinutes = hours.start - now.minutes;
+        }
       } else {
         r.timeLimitMinutes = limit ?? 120;
+        r.postedLimitMinutes = r.timeLimitMinutes;
         r.summary = `free, ${formatLimit(r.timeLimitMinutes)} limit without a ${zone} permit`;
         if (!limit) r.notes.push('Visitor time limit not in the city data; 2 hours is typical, check the sign.');
         if (hours) r.summary += ` until ${formatClock(hours.end)}`;
@@ -184,11 +196,17 @@ export function evaluateBlockface(a, now, { permitZone } = {}) {
   const active = peaks.find(([s, e]) => now.minutes >= s && now.minutes < e);
   const upcoming = peaks.filter(([s]) => s > now.minutes).sort((x, y) => x[0] - y[0])[0];
   if (active) {
+    // Parking is allowed again when the tow-away window ends, if the block
+    // allows parking at all.
+    if (r.canParkNow) r.parkableInMinutes = active[1] - now.minutes;
     r.canParkNow = false;
+    r.postedLimitMinutes = null;
+    r.restrictionInMinutes = null;
     r.summary = `no parking right now, rush-hour tow-away zone until ${formatClock(active[1])}`;
   } else if (upcoming && r.canParkNow) {
     const minutesLeft = upcoming[0] - now.minutes;
     r.timeLimitMinutes = r.timeLimitMinutes == null ? minutesLeft : Math.min(r.timeLimitMinutes, minutesLeft);
+    r.restrictionInMinutes = r.restrictionInMinutes == null ? minutesLeft : Math.min(r.restrictionInMinutes, minutesLeft);
     if (minutesLeft <= 180) r.summary += `, but it becomes a tow-away zone at ${formatClock(upcoming[0])}`;
   }
   if (a.PEAK_HOUR) r.notes.push(`No parking ${a.PEAK_HOUR} on weekdays (peak-hour tow-away).`);
@@ -304,7 +322,8 @@ export async function describeArea({ lat, lon, radiusMeters = 300, permitZone, d
       const r = evaluateBlockface(b.attributes, now, { permitZone });
       return {
         street: r.street, side: r.side, summary: r.summary, canParkNow: r.canParkNow, freeNow: r.freeNow,
-        timeLimitMinutes: r.timeLimitMinutes, path: b.path,
+        timeLimitMinutes: r.timeLimitMinutes, postedLimitMinutes: r.postedLimitMinutes,
+        restrictionInMinutes: r.restrictionInMinutes, parkableInMinutes: r.parkableInMinutes, path: b.path,
       };
     });
   const open = blockfaces.filter((b) => b.canParkNow).length;
