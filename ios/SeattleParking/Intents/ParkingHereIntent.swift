@@ -32,6 +32,9 @@ struct HereSnippet: View {
                     VStack(alignment: .leading) {
                         Text(b.side.map { "\($0.capitalized) side" } ?? "This side").font(.subheadline.bold())
                         Text(b.summary).font(.subheadline)
+                        if let schedule = b.schedule {
+                            Text(schedule).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }

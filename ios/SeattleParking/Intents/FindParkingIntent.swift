@@ -59,6 +59,9 @@ struct SpotsSnippet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(spot.displayStreet).font(.subheadline.bold()).lineLimit(2)
                         Text(spot.summary).font(.subheadline)
+                        if let schedule = spot.schedule {
+                            Text(schedule).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                        }
                         Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
                     }
                 }

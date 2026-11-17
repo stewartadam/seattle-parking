@@ -15,6 +15,9 @@ struct BlockfaceRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(blockface.side.map { "\($0.capitalized) side" } ?? "This side").font(.subheadline.bold())
                 Text(blockface.summary).font(.subheadline)
+                if let schedule = blockface.schedule {
+                    Text(schedule).font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.vertical, 2)
@@ -37,6 +40,9 @@ struct SpotRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(spot.displayStreet).font(.subheadline.bold())
                 Text(spot.summary).font(.subheadline)
+                if let schedule = spot.schedule {
+                    Text(schedule).font(.caption).foregroundStyle(.secondary)
+                }
                 Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
             }
             // Separators start under the street name, not under the number.

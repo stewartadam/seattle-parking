@@ -48,6 +48,8 @@ struct Blockface: Decodable, Hashable {
     let streetLabel: String?
     let side: String?
     let summary: String
+    /// When the rules apply all week, e.g. "2-hour limit, paid Mon–Sat 8 AM–8 PM; free Sun" (newer servers).
+    let schedule: String?
     let canParkNow: Bool
     let freeNow: Bool?
     let timeLimitMinutes: Int?
@@ -78,6 +80,8 @@ struct Spot: Decodable, Hashable {
     let streetLabel: String?
     let side: String?
     let summary: String
+    /// When the rules apply all week, e.g. "2-hour limit, paid Mon–Sat 8 AM–8 PM; free Sun" (newer servers).
+    let schedule: String?
     let freeNow: Bool
     let ratePerHour: Double?
     let timeLimitMinutes: Int?
