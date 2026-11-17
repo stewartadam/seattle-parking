@@ -55,13 +55,20 @@ struct FindParkingView: View {
                     Text("4 hours").tag(240)
                 }
             } label: {
-                Label(minMinutes == 0 ? "Any time" : "\(minMinutes / 60)+ hr", systemImage: "clock")
+                FilterChip(
+                    title: minMinutes == 0 ? "Any time" : "\(minMinutes / 60)+ hours",
+                    systemImage: minMinutes == 0 ? "clock" : "checkmark",
+                    isOn: minMinutes > 0,
+                    isMenu: true
+                )
             }
-            .buttonStyle(.bordered)
+            .accessibilityLabel("Staying for")
+            .accessibilityValue(minMinutes == 0 ? "Any time" : "\(minMinutes / 60) hours or more")
 
-            Toggle(isOn: $freeOnly) { Label("Free only", systemImage: "dollarsign.circle") }
-                .toggleStyle(.button)
-                .buttonStyle(.bordered)
+            Button { freeOnly.toggle() } label: {
+                FilterChip(title: "Free only", systemImage: freeOnly ? "checkmark" : "dollarsign", isOn: freeOnly)
+            }
+            .accessibilityAddTraits(freeOnly ? .isSelected : [])
 
             Spacer()
         }
@@ -88,6 +95,7 @@ struct FindParkingView: View {
                 ForEach(Array(answer.results.enumerated()), id: \.offset) { index, spot in
                     Marker(spot.street, monogram: Text("\(index + 1)"), coordinate: spot.coordinate)
                         .tint(spot.freeNow ? .green : .orange)
+                        .annotationTitles(.hidden)
                         .tag(index)
                 }
             }
@@ -192,6 +200,30 @@ struct FindParkingView: View {
         } catch {
             nearby = .failed(errorMessage(error))
         }
+    }
+}
+
+/// A filter pill: filled accent with white text when on, gray when off.
+private struct FilterChip: View {
+    let title: String
+    let systemImage: String
+    let isOn: Bool
+    var isMenu = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage).imageScale(.small)
+            Text(title)
+            if isMenu { Image(systemName: "chevron.down").imageScale(.small) }
+        }
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(isOn ? Color.white : Color.primary)
+        .padding(.horizontal, 14)
+        .frame(minHeight: 36)
+        .background(Capsule().fill(isOn ? Color.accentColor : Color(.secondarySystemFill)))
+        .overlay(Capsule().strokeBorder(isOn ? Color.clear : Color(.separator), lineWidth: 1))
+        .contentShape(Capsule())
+        .animation(.snappy, value: isOn)
     }
 }
 

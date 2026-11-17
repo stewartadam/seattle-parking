@@ -28,7 +28,7 @@ struct SpotRow: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             Text("\(rank)")
                 .font(.headline)
                 .frame(width: 28, height: 28)
@@ -38,14 +38,19 @@ struct SpotRow: View {
                 Text(spot.summary).font(.subheadline)
                 Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
             }
+            // Separators start under the street name, not under the number.
+            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
             Spacer(minLength: 8)
             Button { openURL(spot.drivingDirectionsURL) } label: {
-                Label("Go", systemImage: "car.fill")
-                    .font(.subheadline.bold())
+                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(Color.accentColor))
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .accessibilityLabel("Driving directions to \(spot.street)")
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Driving directions")
+            .accessibilityHint(spot.street)
         }
         .padding(.vertical, 2)
     }

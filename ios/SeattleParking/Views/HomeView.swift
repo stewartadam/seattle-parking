@@ -125,12 +125,7 @@ struct HomeView: View {
                 FindParkingView()
             } label: {
                 Label("Find parking nearby", systemImage: "magnifyingglass")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
             }
-            .listRowBackground(Color.accentColor)
         } footer: {
             Text("Search around you, then pan the map to look somewhere else.")
         }
