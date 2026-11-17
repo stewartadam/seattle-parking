@@ -109,3 +109,15 @@ test('findParking returns legal spots sorted by distance and respects filters', 
   const long = await findParking({ lat: 47.6239, lon: -122.3145, minMinutes: 240, date, fetchImpl: fakeFetch });
   assert.ok(long.results.every((r) => r.timeLimitMinutes == null || r.timeLimitMinutes >= 240));
 });
+
+test('results include the curb line for drawing on a map', async () => {
+  const date = new Date('2026-10-06T17:00:00Z');
+  const here = await describeHere({ lat: 47.6239, lon: -122.3145, date, fetchImpl: fakeFetch });
+  const nearby = await findParking({ lat: 47.6239, lon: -122.3145, limit: 5, date, fetchImpl: fakeFetch });
+  for (const b of [...here.blockfaces, ...nearby.results]) {
+    assert.ok(b.path.length >= 2, `${b.street} has a curb line`);
+    for (const { lat, lon } of b.path) {
+      assert.ok(lat > 47.4 && lat < 47.8 && lon > -122.5 && lon < -122.2);
+    }
+  }
+});

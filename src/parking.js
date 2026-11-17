@@ -204,9 +204,18 @@ async function nearbyBlockfaces(origin, radiusMeters, fetchImpl) {
     fetchImpl,
   );
   return features
-    .map((f) => ({ attributes: f.attributes, ...distanceToPaths(origin, f.geometry?.paths) }))
+    .map((f) => ({
+      attributes: f.attributes,
+      path: curbLine(f.geometry?.paths),
+      ...distanceToPaths(origin, f.geometry?.paths),
+    }))
     .filter((f) => Number.isFinite(f.distance))
     .sort((x, y) => x.distance - y.distance);
+}
+
+/** The blockface's curb line as [{lat, lon}], for drawing it on a map. */
+function curbLine(paths) {
+  return (paths ?? []).flat().map(([x, y]) => ({ lat: +y.toFixed(6), lon: +x.toFixed(6) }));
 }
 
 async function rpzZoneAt(origin, fetchImpl) {
@@ -241,6 +250,7 @@ export async function describeHere({ lat, lon, permitZone, date = new Date(), fe
   const here = blockfaces.filter((b) => b.distance <= nearest + 20).slice(0, 4).map((b) => ({
     ...evaluateBlockface(b.attributes, now, { permitZone }),
     distanceMeters: Math.round(b.distance),
+    path: b.path,
   }));
 
   const speech = [];
@@ -312,6 +322,7 @@ export async function findParking({
       distanceMeters: Math.round(b.distance),
       direction: formatDistance(b.distance) === 'right here' ? null : compassDirection(origin, b.point),
       point: { lat: +b.point.lat.toFixed(6), lon: +b.point.lon.toFixed(6) },
+      path: b.path,
       mapsUrl: `https://maps.apple.com/?daddr=${b.point.lat.toFixed(6)},${b.point.lon.toFixed(6)}&dirflg=w`,
     });
     if (results.length >= limit) break;
