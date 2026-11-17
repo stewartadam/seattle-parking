@@ -28,6 +28,14 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Link(destination: Self.setupGuideURL) {
+                        Label("Set up your own server", systemImage: "arrow.up.right.square")
+                    }
+                } footer: {
+                    Text("Seattle Parking needs a parking server. It's free and open source; the guide on GitHub shows how to run one.")
+                }
+
+                Section {
                     Button { Task { await testConnection() } } label: {
                         HStack {
                             Text("Test connection")
@@ -79,6 +87,9 @@ struct SettingsView: View {
             .onChange(of: apiKey) { test = .idle }
         }
     }
+
+    /// The self-hosting steps in the project README.
+    private static let setupGuideURL = URL(string: "https://github.com/stewartadam/seattle-parking#running-it")!
 
     /// Asks the server about a fixed downtown spot (Pike Place Market), so the
     /// check works without your location.

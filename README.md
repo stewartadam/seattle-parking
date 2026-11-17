@@ -52,6 +52,16 @@ MCP tools (`POST /mcp`): `parking_rules_here` and `find_nearest_parking`, with t
 
 ## Running it
 
+The quickest way is the published Docker image (Intel and ARM, rebuilt from `main` on every change):
+
+```sh
+docker run -d -p 3000:3000 -e API_KEY=some-long-random-string stewartadam/seattle-parking:latest
+```
+
+Then put it behind HTTPS (see below) and enter that address and the same `API_KEY` in the iPhone app's Settings.
+
+To run from source instead:
+
 ```sh
 npm install
 npm test
