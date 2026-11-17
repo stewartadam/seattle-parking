@@ -51,7 +51,48 @@ struct SpotRow: View {
     }
 }
 
+/// Drawing style shared by curb-line overlays.
+enum CurbLine {
+    static func style(width: CGFloat) -> StrokeStyle {
+        StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
+    }
+}
+
+/// The blocks you're on, drawn as their curb lines: green where you can park
+/// now, red where you can't.
+struct HereMap: View {
+    let blockfaces: [Blockface]
+
+    var body: some View {
+        Map(initialPosition: .automatic, interactionModes: []) {
+            UserAnnotation()
+            ForEach(Array(blockfaces.enumerated()), id: \.offset) { _, blockface in
+                if let curb = blockface.curbCoordinates {
+                    MapPolyline(coordinates: curb)
+                        .stroke(blockface.canParkNow ? Color.green : Color.red, style: CurbLine.style(width: 6))
+                }
+            }
+        }
+        // New data recreates the map so it fits the new lines.
+        .id(blockfaces)
+    }
+}
+
+extension Blockface {
+    var curbCoordinates: [CLLocationCoordinate2D]? { path.curbCoordinates }
+}
+
+extension Optional where Wrapped == [Coordinate] {
+    /// Map coordinates for a curb line, or nil if there isn't a drawable one.
+    var curbCoordinates: [CLLocationCoordinate2D]? {
+        guard let self, self.count >= 2 else { return nil }
+        return self.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+    }
+}
+
 extension Spot {
+    var curbCoordinates: [CLLocationCoordinate2D]? { path.curbCoordinates }
+
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: point.lat, longitude: point.lon)
     }

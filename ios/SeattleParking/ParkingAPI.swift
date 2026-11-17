@@ -44,6 +44,8 @@ struct Blockface: Decodable, Hashable {
     let summary: String
     let canParkNow: Bool
     let distanceMeters: Int?
+    /// The curb line for this side of the block (newer servers only).
+    let path: [Coordinate]?
 }
 
 struct RPZZone: Decodable, Hashable {
@@ -69,6 +71,8 @@ struct Spot: Decodable, Hashable {
     let direction: String?
     let point: Coordinate
     let mapsUrl: String
+    /// The curb line for this side of the block (newer servers only).
+    let path: [Coordinate]?
 }
 
 struct NearbyResponse: Decodable {

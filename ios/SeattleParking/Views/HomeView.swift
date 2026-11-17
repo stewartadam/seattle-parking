@@ -86,6 +86,11 @@ struct HomeView: View {
                 if answer.blockfaces.isEmpty {
                     Text(answer.speech)
                 }
+                if answer.blockfaces.contains(where: { $0.curbCoordinates != nil }) {
+                    HereMap(blockfaces: answer.blockfaces)
+                        .frame(height: 150)
+                        .listRowInsets(EdgeInsets())
+                }
                 ForEach(answer.blockfaces, id: \.self) { BlockfaceRow(blockface: $0) }
                 if let zone = answer.rpzZone?.zone {
                     Label(

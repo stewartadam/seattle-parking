@@ -73,6 +73,18 @@ struct FindParkingView: View {
         Map(position: $position, selection: $selection) {
             UserAnnotation()
             if case .loaded(let answer) = nearby {
+                // Curb lines first so the pins sit on top. The selected one gets a
+                // white outline and a heavier line.
+                ForEach(Array(answer.results.enumerated()), id: \.offset) { index, spot in
+                    if let curb = spot.curbCoordinates {
+                        if selection == index {
+                            MapPolyline(coordinates: curb).stroke(.white, style: CurbLine.style(width: 12))
+                        }
+                        MapPolyline(coordinates: curb)
+                            .stroke(spot.freeNow ? Color.green : Color.orange,
+                                    style: CurbLine.style(width: selection == index ? 8 : 5))
+                    }
+                }
                 ForEach(Array(answer.results.enumerated()), id: \.offset) { index, spot in
                     Marker(spot.street, monogram: Text("\(index + 1)"), coordinate: spot.coordinate)
                         .tint(spot.freeNow ? .green : .orange)
