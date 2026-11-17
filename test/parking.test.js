@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { describeArea, describeHere, evaluateBlockface, findParking, formatDistance, formatStreet } from '../src/parking.js';
+import { describeArea, describeHere, evaluateBlockface, findParking, formatDistance, formatStreet, formatStreetLabel } from '../src/parking.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 
@@ -159,4 +159,17 @@ test('evaluateBlockface separates posted limits, upcoming restrictions and later
   // No-parking blocks never become parkable.
   const none = evaluateBlockface({ ...peak, PARKING_CATEGORY: 'No Parking Allowed', PEAK_HOUR: null }, weekday(12 * 60));
   assert.equal(none.parkableInMinutes, null);
+});
+
+test('formatStreetLabel abbreviates for display', () => {
+  assert.equal(
+    formatStreetLabel('E LYNN ST BETWEEN YALE AVE E AND EASTLAKE AVE E'),
+    'E. Lynn St between Yale Ave E and Eastlake Ave E',
+  );
+  assert.equal(
+    formatStreetLabel('NW 64TH ST BETWEEN 15TH AVE NW AND 17TH AVE NW'),
+    'NW 64th St between 15th Ave NW and 17th Ave NW',
+  );
+  assert.equal(formatStreetLabel('BROADWAY E BETWEEN E OLIVE WAY AND E THOMAS ST'), 'Broadway E between E. Olive Way and E. Thomas St');
+  assert.equal(evaluateBlockface(paid, weekday(600)).streetLabel, 'Broadway E between E. Olive Way and E. Thomas St');
 });

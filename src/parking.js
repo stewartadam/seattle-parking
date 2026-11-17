@@ -51,6 +51,42 @@ export function formatStreet(unitdesc) {
     .join(' ');
 }
 
+const DIRECTIONS = new Set(['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW']);
+const LABEL_SUFFIXES = {
+  AVE: 'Ave', AV: 'Ave', AVENUE: 'Ave', ST: 'St', STREET: 'St', PL: 'Pl', PLACE: 'Pl', DR: 'Dr', DRIVE: 'Dr',
+  BLVD: 'Blvd', BOULEVARD: 'Blvd', WAY: 'Way', CT: 'Ct', COURT: 'Ct', LN: 'Ln', LANE: 'Ln', RD: 'Rd', ROAD: 'Rd',
+  PKWY: 'Pkwy', PARKWAY: 'Pkwy', TER: 'Ter', TERRACE: 'Ter', CIR: 'Cir', CIRCLE: 'Cir', HWY: 'Hwy', HIGHWAY: 'Hwy',
+};
+
+/**
+ * Short display form of an SDOT block description, e.g.
+ * "E LYNN ST BETWEEN YALE AVE E AND EASTLAKE AVE E" ->
+ * "E. Lynn St between Yale Ave E and Eastlake Ave E". Single-letter prefix
+ * directions get a period; other directions stay as uppercase letters.
+ */
+export function formatStreetLabel(unitdesc) {
+  if (!unitdesc) return 'Unnamed block';
+  let startOfName = true;
+  return unitdesc
+    .trim()
+    .split(/\s+/)
+    .map((w) => {
+      const word = w.toUpperCase();
+      const atStart = startOfName;
+      startOfName = false;
+      if (word === 'BETWEEN' || word === 'AND') {
+        startOfName = true;
+        return word.toLowerCase();
+      }
+      if (DIRECTIONS.has(word)) return atStart && word.length === 1 ? `${word}.` : word;
+      if (/^\d+(ST|ND|RD|TH)$/.test(word)) return word.toLowerCase();
+      if (/^\d/.test(word)) return word;
+      if (LABEL_SUFFIXES[word]) return LABEL_SUFFIXES[word];
+      return word[0] + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
 function formatRate(rate) {
   return `$${rate.toFixed(2)} an hour`;
 }
@@ -94,6 +130,7 @@ function currentRate(a, now) {
 export function evaluateBlockface(a, now, { permitZone } = {}) {
   const r = {
     street: formatStreet(a.UNITDESC),
+    streetLabel: formatStreetLabel(a.UNITDESC),
     side: SIDE_NAMES[a.SIDE] ?? null,
     category: a.PARKING_CATEGORY ?? 'Unknown',
     canParkNow: false,
@@ -321,7 +358,7 @@ export async function describeArea({ lat, lon, radiusMeters = 300, permitZone, d
     .map((b) => {
       const r = evaluateBlockface(b.attributes, now, { permitZone });
       return {
-        street: r.street, side: r.side, summary: r.summary, canParkNow: r.canParkNow, freeNow: r.freeNow,
+        street: r.street, streetLabel: r.streetLabel, side: r.side, summary: r.summary, canParkNow: r.canParkNow, freeNow: r.freeNow,
         timeLimitMinutes: r.timeLimitMinutes, postedLimitMinutes: r.postedLimitMinutes,
         restrictionInMinutes: r.restrictionInMinutes, parkableInMinutes: r.parkableInMinutes, path: b.path,
       };
