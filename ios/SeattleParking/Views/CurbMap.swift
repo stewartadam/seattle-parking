@@ -22,12 +22,12 @@ struct AreaLayers {
     var lineCount: Int { groups.reduce(0) { $0 + $1.lines.count } }
 }
 
-/// Loads every blockface in the visible map area from /api/area, so the map
+/// Loads every blockface in the visible map area, so the map
 /// can color all the streets, not just the search results.
 ///
 /// The map is split into a fixed grid of 250 m tiles. Each tile in view is
 /// fetched once (a circle query just covering it), nearest first, at most four
-/// at a time, and cached. A tile that hits the server's cap is split into four
+/// at a time, and cached. A tile that hits the 600-blockface cap is split into four
 /// 125 m tiles. Lines are shifted and grouped off the main thread, and only
 /// rebuilt when tiles arrive or the zoom changes noticeably.
 @MainActor @Observable
@@ -46,7 +46,7 @@ final class AreaCurbs {
     nonisolated private static let tileLon = 250.0 / (111_320 * cos(47.62 * .pi / 180))
     private static let maxTiles = 36
     private static let maxConcurrent = 4
-    /// /api/area returns at most 600 blockfaces; near that means "truncated".
+    /// An area answer has at most 600 blockfaces; near that means "truncated".
     private static let serverCap = 580
 
     struct Tile: Hashable {
@@ -75,7 +75,6 @@ final class AreaCurbs {
     private var split: Set<Tile> = []
     private var inFlight: [Tile: (token: UUID, task: Task<Void, Never>)] = [:]
     private var queue: [Tile] = []
-    private var unsupported = false
 
     private var visible: MKCoordinateRegion?
     private var zoomStep: Int?
@@ -137,7 +136,6 @@ final class AreaCurbs {
     }
 
     private func pump() {
-        guard !unsupported else { queue = []; return }
         while inFlight.count < Self.maxConcurrent, !queue.isEmpty {
             let tile = queue.removeFirst()
             let token = UUID()
@@ -153,7 +151,7 @@ final class AreaCurbs {
             pump()
         }
         do {
-            // The request and JSON decoding run off the main thread.
+            // The lookup runs off the main thread.
             let api = try ParkingAPI.fromSettings()
             let answer = try await api.area(tile.center, radiusMeters: tile.radiusMeters)
             guard !Task.isCancelled else { return }
@@ -163,8 +161,6 @@ final class AreaCurbs {
             }
             cache[tile] = answer.blockfaces
             scheduleRebuild(delay: 150)
-        } catch ParkingError.notFound {
-            unsupported = true
         } catch {
             // Cancelled (left the view) or a network hiccup: retry shortly if
             // it's still in view, instead of waiting for the map to move.
@@ -316,7 +312,7 @@ enum CurbLine {
                      restrictionInMinutes: Int?, filters: CurbFilters) -> Kind {
         if !canParkNow { return .noParking }
         var posted = postedLimitMinutes
-        // Older servers only send the combined limit: treat it as posted.
+        // Answers without the finer detail: treat the combined limit as posted.
         if posted == nil, restrictionInMinutes == nil { posted = timeLimitMinutes }
 
         let horizon = filters.stayingMinutes ?? restrictionHorizonMinutes

@@ -15,7 +15,7 @@ import UIKit
 final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPPointOfInterestTemplateDelegate {
     /// CarPlay shows at most 12 points of interest.
     private static let maxSpots = 12
-    /// The server searches at most 1.5 km from the center point.
+    /// Searches reach at most 1.5 km from the center point.
     private static let maxRadiusMeters = 1500.0
 
     private var scene: CPTemplateApplicationScene?

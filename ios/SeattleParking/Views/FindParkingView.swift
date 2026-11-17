@@ -26,7 +26,7 @@ struct FindParkingView: View {
     /// Quantized zoom, so result lines only shift when the zoom changes noticeably.
     @State private var zoomStep: Int?
 
-    /// The server searches at most 1.5 km from the center point.
+    /// Searches reach at most 1.5 km from the center point.
     private static let maxRadiusMeters = 1500.0
 
     var body: some View {

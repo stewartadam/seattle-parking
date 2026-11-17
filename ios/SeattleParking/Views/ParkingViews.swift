@@ -77,7 +77,7 @@ extension Optional where Wrapped == [Coordinate] {
 
 extension Spot {
     /// Halfway along this blockface's curb, for placing its pin; the closest
-    /// point (`coordinate`) when the server didn't send a curb line.
+    /// point (`coordinate`) when there's no curb line.
     var zoneCenter: CLLocationCoordinate2D {
         guard let path, path.count >= 2 else { return coordinate }
         let cosLat = cos(path[0].lat * .pi / 180)
@@ -104,7 +104,7 @@ extension Spot {
     }
 
     /// Apple Maps driving directions to the middle of the block side, where
-    /// its pin is. (The server's mapsUrl is walking, to the nearest point.)
+    /// its pin is. (The answer's mapsUrl is walking, to the nearest point.)
     var drivingDirectionsURL: URL {
         let target = zoneCenter
         var components = URLComponents(string: "https://maps.apple.com/")!

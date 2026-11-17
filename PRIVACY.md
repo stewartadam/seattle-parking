@@ -6,12 +6,14 @@ Seattle Parking looks up street parking rules in Seattle. This page explains wha
 
 ## What the app uses
 
-- **Your location.** When you ask about parking (in the app, with Siri or on CarPlay), the app reads your current location and sends it to the parking server to look up the rules for nearby streets. When you search an area of the map, it sends that area instead. The app only reads your location while you're using it.
-- **Your settings.** The server address, API key and permit zone you enter are stored on your phone only.
+- **Your location.** When you ask about parking (in the app, with Siri or on CarPlay), the app reads your current location and looks up the rules for nearby streets in a copy of the City of Seattle's parking data stored on your phone. Your location stays on your phone. The app only reads your location while you're using it.
+- **Your settings.** The permit zone you enter is stored on your phone only.
 
-## What happens on the server
+## Downloading the city's data
 
-The server uses the location in each request to look up Seattle's public parking data and send back the answer. It doesn't store your location or tie requests to who you are. Like most web servers, it may keep short-lived technical logs (such as the time of a request) to keep the service running.
+The app downloads the City of Seattle's public parking data from the city's map service (hosted by Esri's ArcGIS Online) when you first open it and about once a week after that. These downloads are the same for everyone and don't include your location.
+
+If you ask a question before the first download finishes, the app sends the location you're asking about to the city's map service to get the answer for that one question. The city's map service may keep standard technical logs of these requests under the [City of Seattle's privacy statement](https://www.seattle.gov/privacy) and [Esri's privacy policy](https://www.esri.com/en-us/privacy/overview).
 
 ## What the app doesn't do
 
@@ -21,7 +23,7 @@ The server uses the location in each request to look up Seattle's public parking
 
 ## Third parties
 
-Maps and directions are provided by Apple Maps under [Apple's privacy policy](https://www.apple.com/legal/privacy/). Parking rules come from the City of Seattle's public open data.
+Maps and directions are provided by Apple Maps under [Apple's privacy policy](https://www.apple.com/legal/privacy/). Parking rules come from the City of Seattle's public open data (Seattle Department of Transportation).
 
 ## Contact
 
