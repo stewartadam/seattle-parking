@@ -55,3 +55,22 @@ targets:
         # to the team; until then signing would fail without it in the profile.
         "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": CarPlay.entitlements
         # CODE_SIGN_ENTITLEMENTS: CarPlay.entitlements
+    # Xcode's Test command (Cmd-U) and CI run the unit tests in this scheme.
+    scheme:
+      testTargets:
+        - SeattleParkingTests
+  # Unit tests for the parking rules (Parking/), run in the iOS Simulator.
+  # They mirror the server's tests in test/ and use its recorded city data.
+  SeattleParkingTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - SeattleParkingTests
+      - path: ../test/fixtures
+        buildPhase: resources
+    dependencies:
+      - target: SeattleParking
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.github.stewartadam.seattleparking.tests
+        GENERATE_INFOPLIST_FILE: YES
