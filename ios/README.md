@@ -1,6 +1,8 @@
 # Seattle Parking for iPhone (Siri App Intents)
 
-A small iOS app that lets Siri answer parking questions using the phone's location, with no Shortcuts setup needed. It calls the same server as the Shortcuts (`/api/here`, `/api/nearby`).
+A small iOS app that lets Siri answer parking questions using the phone's location, with no Shortcuts setup and no server needed.
+
+The app keeps a copy of the City of Seattle's street parking data on the phone (about 46,000 block sides, about a 3 MB download and 10 MB on disk) and refreshes it every week, so answers work without a connection. It downloads the copy on first launch, and the first question waits for that download. Your location never leaves the phone. The parking rules are a Swift port of the server's `src/parking.js`, in `SeattleParking/Parking/`, and give the same answers.
 
 | Say | What happens |
 | --- | --- |
@@ -25,12 +27,12 @@ open SeattleParking.xcodeproj
 
 1. In Xcode, select the **SeattleParking** target, then go to **Signing & Capabilities**. Pick your team. The bundle ID is `com.github.stewartadam.seattleparking`; change it if you build under a different account.
 2. Plug in your iPhone, select it as the run destination, and press Run. If you haven't enabled Developer Mode on the phone, enable it under Settings › Privacy & Security.
-3. The app opens Settings on first launch. Enter your server URL (for example `https://parking.example.com`) and your API key, then tap **Test connection**. The app has no default server. Add your RPZ permit zone if you have one.
-4. Tap **Done**. Allow location access when asked (**While Using the App**). The main screen then shows the rules for the street you're on, and **Find parking** shows nearby spots on a map with walking directions. Then try Siri.
+3. Allow location access when asked (**While Using the App**). If you have an RPZ permit, add its zone in Settings (the gear icon).
+4. The main screen then shows the rules for the street you're on, and **Find parking** shows nearby spots on a map with walking directions. Then try Siri.
 
 Siri can take a minute after the first install to pick up the phrases. If Siri says it can't get your location, open the app once, or set Location to "Always" in Settings › Seattle Parking.
 
-The API key is stored in the app's preferences on the phone.
+Settings also shows when the city data was last updated, with an **Update Now** button.
 
 ## CarPlay
 

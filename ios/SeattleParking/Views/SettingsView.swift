@@ -1,62 +1,16 @@
-import CoreLocation
 import SwiftUI
 import UIKit
 
 struct SettingsView: View {
-    @AppStorage(Settings.serverURLKey) private var serverURL = ""
-    @AppStorage(Settings.apiKeyKey) private var apiKey = ""
     @AppStorage(Settings.permitZoneKey) private var permitZone = ""
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @State private var test: Loadable<Void> = .idle
+    @State private var cityData: CityData.State = .none
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField("https://parking.example.com", text: $serverURL)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
-                        .textContentType(.URL)
-                    SecureField("API key", text: $apiKey)
-                } header: {
-                    Text("Server")
-                } footer: {
-                    Text("The address of your parking server and the API key it was set up with.")
-                }
-
-                Section {
-                    Link(destination: Self.setupGuideURL) {
-                        Label("Set up your own server", systemImage: "arrow.up.right.square")
-                    }
-                } footer: {
-                    Text("Seattle Parking needs a parking server. It's free and open source; the guide on GitHub shows how to run one.")
-                }
-
-                Section {
-                    Button { Task { await testConnection() } } label: {
-                        HStack {
-                            Text("Test connection")
-                            Spacer()
-                            switch test {
-                            case .idle: EmptyView()
-                            case .loading: ProgressView()
-                            case .loaded: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                            case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                            }
-                        }
-                    }
-                    .disabled(test.isLoading || serverURL.isEmpty || apiKey.isEmpty)
-                } footer: {
-                    switch test {
-                    case .loaded: Text("Connected. The server answered and accepted your key.")
-                    case .failed(let message): Text(message)
-                    default: EmptyView()
-                    }
-                }
-
                 Section {
                     TextField("Zone number", text: $permitZone)
                         .keyboardType(.numberPad)
@@ -67,13 +21,40 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    HStack {
+                        Text("Parking data")
+                        Spacer()
+                        cityDataStatus.foregroundStyle(.secondary)
+                    }
+                    Button("Update Now") {
+                        Task {
+                            await CityData.shared.refresh()
+                            await watchCityData()
+                        }
+                    }
+                    .disabled(isDownloading)
+                } header: {
+                    Text("City of Seattle data")
+                } footer: {
+                    Text("Seattle Parking keeps a copy of the city's street parking rules on your phone, so it works without a connection, and updates it every week. Parking data from the City of Seattle, Seattle Department of Transportation. The city doesn't guarantee it's accurate, so always check the posted signs.")
+                }
+
+                Section {
                     Button("Open Location Settings") {
                         if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                     }
                 } header: {
                     Text("Location")
                 } footer: {
-                    Text("Seattle Parking uses your location to look up the street you're on. If Siri says it can't get your location, set Location to Always.")
+                    Text("Seattle Parking uses your location to look up the street you're on. Your location stays on your phone. If Siri says it can't get your location, set Location to Always.")
+                }
+
+                Section {
+                    Link(destination: Self.sourceURL) {
+                        Label("Source code on GitHub", systemImage: "arrow.up.right.square")
+                    }
+                } header: {
+                    Text("About")
                 }
 
                 Section {} footer: {
@@ -87,24 +68,43 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .onChange(of: serverURL) { test = .idle }
-            .onChange(of: apiKey) { test = .idle }
+            .task { await watchCityData() }
         }
     }
 
-    /// The self-hosting steps in the project README.
-    private static let setupGuideURL = URL(string: "https://github.com/stewartadam/seattle-parking#running-it")!
+    private static let sourceURL = URL(string: "https://github.com/stewartadam/seattle-parking")!
 
-    /// Asks the server about a fixed downtown spot (Pike Place Market), so the
-    /// check works without your location.
-    private func testConnection() async {
-        test = .loading
-        do {
-            let api = try ParkingAPI.fromSettings()
-            _ = try await api.here(CLLocationCoordinate2D(latitude: 47.6097, longitude: -122.3422))
-            test = .loaded(())
-        } catch {
-            test = .failed(errorMessage(error))
+    private var isDownloading: Bool {
+        if case .downloading = cityData { return true }
+        return false
+    }
+
+    @ViewBuilder private var cityDataStatus: some View {
+        switch cityData {
+        case .none:
+            Text("Not downloaded yet")
+        case .downloading(let fraction):
+            HStack(spacing: 8) {
+                ProgressView(value: fraction).frame(width: 60)
+                Text("Downloading")
+            }
+        case .ready(let date):
+            Text("Updated \(date.formatted(.relative(presentation: .named)))")
+        case .failed(_, let lastUpdate):
+            if let lastUpdate {
+                Text("Update failed, using \(lastUpdate.formatted(date: .abbreviated, time: .omitted))")
+            } else {
+                Text("Download failed, try again")
+            }
+        }
+    }
+
+    /// Follows the download while it runs.
+    private func watchCityData() async {
+        cityData = await CityData.shared.currentState()
+        while isDownloading, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(300))
+            cityData = await CityData.shared.currentState()
         }
     }
 }

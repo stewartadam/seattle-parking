@@ -4,27 +4,16 @@ import SwiftUI
 /// The main screen: the rules where you're standing, a parking search with a
 /// map, and the phrases Siri understands. Settings live in a sheet.
 struct HomeView: View {
-    @AppStorage(Settings.serverURLKey) private var serverURL = ""
-    @AppStorage(Settings.apiKeyKey) private var apiKey = ""
-
     @State private var showSettings = false
     @State private var here: Loadable<HereResponse> = .idle
     @State private var locationManager = CLLocationManager()
 
-    private var isConfigured: Bool {
-        !serverURL.trimmingCharacters(in: .whitespaces).isEmpty && !apiKey.isEmpty
-    }
-
     var body: some View {
         NavigationStack {
             List {
-                if isConfigured {
-                    hereSection
-                    findSection
-                    siriSection
-                } else {
-                    setupSection
-                }
+                hereSection
+                findSection
+                siriSection
             }
             // No title: the app's name is obvious on its own home screen.
             .toolbar {
@@ -38,10 +27,10 @@ struct HomeView: View {
                 SettingsView()
             }
             .task {
-                guard isConfigured else {
-                    showSettings = true
-                    return
-                }
+                // Download the city's parking data on first launch, and
+                // refresh it when it's over a week old. The first answer
+                // waits for the download.
+                await CityData.shared.refreshIfStale()
                 if locationManager.authorizationStatus == .notDetermined {
                     locationManager.requestWhenInUseAuthorization()
                 }
@@ -51,25 +40,6 @@ struct HomeView: View {
     }
 
     // MARK: - Sections
-
-    private var setupSection: some View {
-        Section {
-            VStack(spacing: 12) {
-                Image(systemName: "parkingsign.circle.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.tint)
-                Text("Set up Seattle Parking").font(.headline)
-                Text("Enter your parking server and API key to get started.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button("Open Settings") { showSettings = true }
-                    .buttonStyle(.borderedProminent)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
-        }
-    }
 
     private var hereSection: some View {
         Section {
@@ -146,7 +116,6 @@ struct HomeView: View {
     // MARK: - Loading
 
     private func loadHere() async {
-        guard isConfigured else { return }
         here = .loading
         do {
             let api = try ParkingAPI.fromSettings()

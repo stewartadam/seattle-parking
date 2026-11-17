@@ -15,6 +15,8 @@ It's a small Node server that looks up the City of Seattle's live SDOT parking d
 
 Setup guides: [Siri Shortcut](docs/siri-shortcut.md) · [ChatGPT](docs/chatgpt.md) · [iPhone app with Siri App Intents](ios/README.md)
 
+The iPhone app doesn't need this server: it downloads the city's data itself and answers on the phone, using a Swift port of the same rules (`ios/SeattleParking/Parking/`). If you change the rules in `src/parking.js`, make the same change there.
+
 ## Data
 
 All data comes live from the City of Seattle's public ArcGIS services (no API key needed):
@@ -58,7 +60,7 @@ The quickest way is the published Docker image (Intel and ARM, rebuilt from `mai
 docker run -d -p 3000:3000 -e API_KEY=some-long-random-string stewartadam/seattle-parking:latest
 ```
 
-Then put it behind HTTPS (see below) and enter that address and the same `API_KEY` in the iPhone app's Settings.
+Then put it behind HTTPS (see below) and use that address and the same `API_KEY` in your Siri Shortcut or ChatGPT setup.
 
 To run from source instead:
 
