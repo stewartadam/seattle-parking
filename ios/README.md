@@ -34,6 +34,21 @@ Siri can take a minute after the first install to pick up the phrases. If Siri s
 
 Settings also shows when the city data was last updated, with an **Update Now** button.
 
+## Tests
+
+The parking rules have unit tests in `SeattleParkingTests/`. They check the same cases as the server's tests in `test/`, using the same recorded Capitol Hill data, so the app and the server keep giving the same answers.
+
+GitHub runs them automatically on every pull request that touches `ios/`, in an iPhone simulator, and shows a green check or a red cross on the pull request. Nothing needs setting up.
+
+To run them yourself on the Mac:
+
+1. Generate and open the project as above (`xcodegen generate`, then `open SeattleParking.xcodeproj`).
+2. At the top of the Xcode window, set the run destination to any iPhone simulator (for example **iPhone 17**), not your phone.
+3. Choose **Product › Test** (or press Command-U). The simulator opens briefly while they run.
+4. Open the Test navigator (the diamond icon in the left sidebar, or Command-6) to see each test with a green or red mark.
+
+If you change a rule in `src/parking.js`, change the Swift copy in `SeattleParking/Parking/` too, and add a test on both sides.
+
 ## CarPlay
 
 On CarPlay the app shows Apple's parking map with up to 12 of the closest spots, pinned in the same colors as the phone's street map: green is free, yellow has restrictions, red is no parking. Choose a stay length with the button at the top left, and green-yellow then means the spot works for that stay. Tap a pin for its rules and a **Directions** button that opens Maps. **Search Here** searches wherever you've scrolled the map, and the location button searches around the car again.
