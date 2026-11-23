@@ -4,7 +4,8 @@ import SwiftUI
 
 /// The parking search, on its own screen: filters, a map you can pan, and the
 /// results. The first search is around you; after moving the map, "Search this
-/// area" looks inside the visible region instead.
+/// area" looks inside the visible region instead. Tapping any street on the map
+/// (or a result) shows that street side's rules in place of the list.
 struct FindParkingView: View {
     @State private var minMinutes = 0
     @State private var freeOnly = false
@@ -20,8 +21,8 @@ struct FindParkingView: View {
     @State private var lastQueryRegion: MKCoordinateRegion?
     /// Set while the map zooms to fit fresh results, so that move isn't the user's.
     @State private var fittingResults = false
-    /// Index of the result picked on the map or in the list.
-    @State private var selection: Int?
+    /// The street side picked on the map or in the list; its rules replace the list.
+    @State private var selected: AreaBlockface?
     @State private var area = AreaCurbs()
     /// Quantized zoom, so result lines only shift when the zoom changes noticeably.
     @State private var zoomStep: Int?
@@ -40,8 +41,14 @@ struct FindParkingView: View {
                 if area.zoomedOutTooFar { ZoomInHint().allowsHitTesting(false) }
             }
             .frame(maxHeight: .infinity)
-            results
-                .frame(maxHeight: .infinity)
+            Group {
+                if let selected {
+                    CurbDetail(curb: selected, filters: filters) { self.selected = nil }
+                } else {
+                    results
+                }
+            }
+            .frame(maxHeight: .infinity)
         }
         .navigationTitle("Find Parking")
         .navigationBarTitleDisplayMode(.inline)
@@ -102,25 +109,29 @@ struct FindParkingView: View {
         let shift = zoomStep.map(CurbLine.shiftMeters(step:)) ?? 0
         let filters = filters
         var highlights: [HighlightCurb] = []
-        var pins: [ResultPin] = []
+        var key = Hasher()
         if case .loaded(let answer) = nearby {
-            for (index, spot) in answer.results.enumerated() {
-                // Pins sit halfway along their block side so neighbors overlap less.
-                let color = spot.kind(filters: filters).color
-                pins.append(ResultPin(index: index, coordinate: spot.zoneCenter, color: color))
-                guard let path = spot.path, path.count >= 2 else { continue }
+            // The results' streets, a little heavier than the rest.
+            for spot in answer.results {
+                guard let path = spot.path, path.count >= 2, spot.asCurb.id != selected?.id else { continue }
                 highlights.append(HighlightCurb(
                     coordinates: CurbLine.offset(path, side: spot.side, meters: shift),
-                    color: color,
-                    width: selection == index ? 6 : 4,
-                    outlined: selection == index
+                    color: spot.kind(filters: filters).color,
+                    width: 4
                 ))
+                key.combine(spot.asCurb.id)
             }
         }
-        var key = Hasher()
-        key.combine(pins.count)
-        for pin in pins { key.combine(pin.coordinate.latitude); key.combine(pin.coordinate.longitude) }
-        key.combine(selection)
+        // The picked street on top, outlined.
+        if let selected, selected.path.count >= 2 {
+            highlights.append(HighlightCurb(
+                coordinates: CurbLine.offset(selected.path, side: selected.side, meters: shift),
+                color: selected.kind(filters: filters).color,
+                width: 6,
+                outlined: true
+            ))
+        }
+        key.combine(selected?.id)
         key.combine(zoomStep)
         key.combine(filters.stayingMinutes)
         key.combine(filters.freeOnly)
@@ -129,10 +140,9 @@ struct FindParkingView: View {
             area: area,
             highlights: highlights,
             highlightsKey: key.finalize(),
-            pins: pins,
-            selection: $selection,
             focus: focus,
-            onRegionChange: { region, width in cameraSettled(region, width: width) }
+            onRegionChange: { region, width in cameraSettled(region, width: width) },
+            onTapCurb: { curb in withAnimation(.snappy) { selected = curb } }
         )
     }
 
@@ -182,19 +192,31 @@ struct FindParkingView: View {
         case .loaded(let answer) where answer.results.isEmpty:
             ContentUnavailableView("No parking found", systemImage: "car", description: Text(answer.speech))
         case .loaded(let answer):
-            ScrollViewReader { proxy in
-                List(Array(answer.results.enumerated()), id: \.offset) { index, spot in
-                    SpotRow(rank: index + 1, spot: spot, kind: spot.kind(filters: filters))
-                        .contentShape(Rectangle())
-                        .onTapGesture { selection = index }
-                        .listRowBackground(selection == index ? Color.accentColor.opacity(0.15) : nil)
-                }
-                .listStyle(.plain)
-                .onChange(of: selection) {
-                    guard let selection else { return }
-                    withAnimation { proxy.scrollTo(selection, anchor: .center) }
+            List {
+                Section {
+                    ForEach(Array(answer.results.enumerated()), id: \.offset) { _, spot in
+                        SpotRow(spot: spot, kind: spot.kind(filters: filters))
+                            .contentShape(Rectangle())
+                            .onTapGesture { select(spot) }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityHint("Shows this street's rules")
+                    }
+                } header: {
+                    Label("Tap any street on the map to see its rules", systemImage: "hand.tap")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
                 }
             }
+            .listStyle(.plain)
+        }
+    }
+
+    /// Picks a result: shows its rules, and brings it into view if it's off the map.
+    private func select(_ spot: Spot) {
+        withAnimation(.snappy) { selected = spot.asCurb }
+        if let visibleRegion, !visibleRegion.contains(spot.zoneCenter) {
+            moveMap(to: MKCoordinateRegion(center: spot.zoneCenter, span: visibleRegion.span))
         }
     }
 
@@ -228,7 +250,6 @@ struct FindParkingView: View {
                 radiusMeters: radius
             )
             SpotStore.shared.save(answer.results)
-            selection = nil
             nearby = .loaded(answer)
             lastQueryRegion = region
             searchedRegion = region ?? visibleRegion
@@ -275,6 +296,11 @@ private struct FilterChip: View {
 }
 
 extension MKCoordinateRegion {
+    func contains(_ c: CLLocationCoordinate2D) -> Bool {
+        abs(c.latitude - center.latitude) <= span.latitudeDelta / 2
+            && abs(c.longitude - center.longitude) <= span.longitudeDelta / 2
+    }
+
     /// Distance from the center to a corner, in meters.
     var halfDiagonalMeters: Double {
         let corner = CLLocation(

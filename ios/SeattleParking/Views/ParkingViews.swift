@@ -24,19 +24,18 @@ struct BlockfaceRow: View {
     }
 }
 
-/// A search result with a driving-directions button.
+/// A search result with a driving-directions button. The bar on the left is
+/// the street's color on the map.
 struct SpotRow: View {
-    let rank: Int
     let spot: Spot
     var kind: CurbLine.Kind? = nil
-    @Environment(\.openURL) private var openURL
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Text("\(rank)")
-                .font(.headline)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(Color((kind ?? spot.kind(filters: CurbFilters())).color).opacity(0.3)))
+            Capsule()
+                .fill(Color((kind ?? spot.kind(filters: CurbFilters())).color))
+                .frame(width: 5, height: 36)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(spot.displayStreet).font(.subheadline.bold())
                 Text(spot.summary).font(.subheadline)
@@ -48,18 +47,78 @@ struct SpotRow: View {
             // Separators start under the street name, not under the number.
             .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
             Spacer(minLength: 8)
-            Button { openURL(spot.drivingDirectionsURL) } label: {
-                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                    .font(.title3)
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.accentColor))
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Driving directions")
-            .accessibilityHint(spot.street)
+            DirectionsButton(url: spot.drivingDirectionsURL, street: spot.street)
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// A round driving-directions button.
+struct DirectionsButton: View {
+    let url: URL
+    let street: String
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Button { openURL(url) } label: {
+            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                .font(.title3)
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(Color.accentColor))
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Driving directions")
+        .accessibilityHint(street)
+    }
+}
+
+/// The rules for one street side picked on the map (or in the results list).
+struct CurbDetail: View {
+    let curb: AreaBlockface
+    let filters: CurbFilters
+    var onClose: () -> Void
+
+    var body: some View {
+        let kind = curb.kind(filters: filters)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(curb.streetLabel ?? curb.street).font(.headline)
+                        Text(curb.side.map { "\($0.capitalized) side" } ?? "This side")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    if curb.canParkNow {
+                        DirectionsButton(url: curb.drivingDirectionsURL, street: curb.street)
+                    }
+                    Button(action: onClose) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Close")
+                    .accessibilityHint("Back to the nearest spots")
+                }
+                HStack(spacing: 6) {
+                    Capsule().fill(Color(kind.color)).frame(width: 14, height: 5)
+                    Text(curb.canParkNow ? kind.label(filtersActive: filters.isActive) : "No parking now")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .accessibilityElement(children: .combine)
+                Text(curb.summary)
+                if let schedule = curb.schedule {
+                    Text(schedule).font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+        }
     }
 }
 
@@ -75,11 +134,13 @@ extension Optional where Wrapped == [Coordinate] {
     }
 }
 
-extension Spot {
-    /// Halfway along this blockface's curb, for placing its pin; the closest
-    /// point (`coordinate`) when there's no curb line.
-    var zoneCenter: CLLocationCoordinate2D {
-        guard let path, path.count >= 2 else { return coordinate }
+extension Array where Element == Coordinate {
+    /// Halfway along the line, or nil when it's empty.
+    var midpoint: CLLocationCoordinate2D? {
+        guard let first else { return nil }
+        let path = self
+        let fallback = CLLocationCoordinate2D(latitude: first.lat, longitude: first.lon)
+        guard path.count >= 2 else { return fallback }
         let cosLat = cos(path[0].lat * .pi / 180)
         func length(_ a: Coordinate, _ b: Coordinate) -> Double {
             hypot(b.lat - a.lat, (b.lon - a.lon) * cosLat)
@@ -94,7 +155,42 @@ extension Spot {
             }
             remaining -= segment
         }
-        return coordinate
+        return fallback
+    }
+}
+
+/// Apple Maps driving directions to a point.
+func appleMapsDrivingURL(to target: CLLocationCoordinate2D) -> URL {
+    var components = URLComponents(string: "https://maps.apple.com/")!
+    components.queryItems = [
+        URLQueryItem(name: "daddr", value: String(format: "%.6f,%.6f", target.latitude, target.longitude)),
+        URLQueryItem(name: "dirflg", value: "d"),
+    ]
+    return components.url!
+}
+
+extension AreaBlockface {
+    /// Directions to the middle of the block side.
+    var drivingDirectionsURL: URL {
+        appleMapsDrivingURL(to: path.midpoint ?? CLLocationCoordinate2D(latitude: 47.6062, longitude: -122.3321))
+    }
+}
+
+extension Spot {
+    /// Halfway along this blockface's curb; the closest point (`coordinate`)
+    /// when there's no curb line.
+    var zoneCenter: CLLocationCoordinate2D {
+        guard let path, path.count >= 2, let middle = path.midpoint else { return coordinate }
+        return middle
+    }
+
+    /// This result as a map street side, so picking it in the list and
+    /// tapping its line on the map select the same thing.
+    var asCurb: AreaBlockface {
+        AreaBlockface(street: street, streetLabel: streetLabel, side: side, summary: summary, schedule: schedule,
+                      canParkNow: true, freeNow: freeNow, timeLimitMinutes: timeLimitMinutes,
+                      postedLimitMinutes: postedLimitMinutes, restrictionInMinutes: restrictionInMinutes,
+                      path: path ?? [point])
     }
 
     var curbCoordinates: [CLLocationCoordinate2D]? { path.curbCoordinates }
@@ -103,17 +199,9 @@ extension Spot {
         CLLocationCoordinate2D(latitude: point.lat, longitude: point.lon)
     }
 
-    /// Apple Maps driving directions to the middle of the block side, where
-    /// its pin is. (The answer's mapsUrl is walking, to the nearest point.)
-    var drivingDirectionsURL: URL {
-        let target = zoneCenter
-        var components = URLComponents(string: "https://maps.apple.com/")!
-        components.queryItems = [
-            URLQueryItem(name: "daddr", value: String(format: "%.6f,%.6f", target.latitude, target.longitude)),
-            URLQueryItem(name: "dirflg", value: "d"),
-        ]
-        return components.url!
-    }
+    /// Apple Maps driving directions to the middle of the block side. (The
+    /// answer's mapsUrl is walking, to the nearest point.)
+    var drivingDirectionsURL: URL { appleMapsDrivingURL(to: zoneCenter) }
 
     /// "350 ft north, east side"
     var distanceLabel: String {

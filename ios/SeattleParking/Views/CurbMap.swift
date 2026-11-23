@@ -19,7 +19,16 @@ struct AreaLayers {
     var version = 0
     var groups: [(color: UIColor, lines: [[CLLocationCoordinate2D]])] = []
     var width: CGFloat = 3
+    /// Every drawn line with the block side it belongs to, for finding the
+    /// street under a tap.
+    var segments: [CurbSegment] = []
     var lineCount: Int { groups.reduce(0) { $0 + $1.lines.count } }
+}
+
+/// One drawn street side: its rules and the line as drawn (shifted toward its curb).
+struct CurbSegment {
+    let blockface: AreaBlockface
+    let line: [CLLocationCoordinate2D]
 }
 
 /// Loads every blockface in the visible map area, so the map
@@ -203,6 +212,7 @@ final class AreaCurbs {
         let shift = CurbLine.shiftMeters(step: step)
         var seen = Set<String>()
         var lines: [CurbLine.Kind: [[CLLocationCoordinate2D]]] = [:]
+        var segments: [CurbSegment] = []
         for blockfaces in tiles {
             for b in blockfaces where bounds.intersects(b.path) {
                 guard seen.insert(b.id).inserted else { continue }
@@ -211,9 +221,11 @@ final class AreaCurbs {
                                          postedLimitMinutes: b.postedLimitMinutes, restrictionInMinutes: b.restrictionInMinutes,
                                          filters: filters)
                 lines[kind, default: []].append(line)
+                segments.append(CurbSegment(blockface: b, line: line))
             }
         }
         var layers = AreaLayers()
+        layers.segments = segments
         // One MKMultiPolyline per color; later groups draw on top.
         layers.groups = CurbLine.Kind.allCases.map { ($0.color, lines[$0] ?? []) }
         layers.width = CurbLine.areaWidth(step: step)
@@ -410,13 +422,6 @@ struct HighlightCurb {
     var outlined = false
 }
 
-/// A numbered search-result pin.
-struct ResultPin {
-    let index: Int
-    let coordinate: CLLocationCoordinate2D
-    let color: UIColor
-}
-
 /// Where the map should move to. Changing `id` moves it, even to the same region.
 struct MapFocus: Equatable {
     var id: Int
@@ -433,10 +438,11 @@ struct CurbMapView: UIViewRepresentable {
     var highlights: [HighlightCurb] = []
     /// Changes whenever `highlights` should be redrawn.
     var highlightsKey: Int = 0
-    var pins: [ResultPin] = []
-    var selection: Binding<Int?> = .constant(nil)
     var focus: MapFocus?
     var interactive = true
+    /// Called with the street side under a tap, or nil for a tap away from
+    /// any street. Leave nil to ignore taps.
+    var onTapCurb: ((AreaBlockface?) -> Void)?
     var onRegionChange: (MKCoordinateRegion, CGFloat) -> Void = { _, _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -446,7 +452,6 @@ struct CurbMapView: UIViewRepresentable {
         map.delegate = context.coordinator
         map.showsUserLocation = true
         map.pointOfInterestFilter = .excludingAll
-        map.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "pin")
         if let focus {
             map.setRegion(focus.region, animated: false)
             context.coordinator.focusID = focus.id
@@ -466,6 +471,7 @@ struct CurbMapView: UIViewRepresentable {
                 button.topAnchor.constraint(equalTo: map.safeAreaLayoutGuide.topAnchor, constant: 12),
                 button.trailingAnchor.constraint(equalTo: map.trailingAnchor, constant: -12),
             ])
+            context.coordinator.addTapRecognizer(to: map)
         } else {
             map.isScrollEnabled = false
             map.isZoomEnabled = false
@@ -504,43 +510,23 @@ struct CurbMapView: UIViewRepresentable {
             c.pruneStyles(keeping: c.areaOverlays + c.highlightOverlays)
         }
 
-        let pinsKey = pins.map { "\($0.index):\($0.coordinate.latitude),\($0.coordinate.longitude):\($0.color.hashValue)" }.joined(separator: ";")
-        if pinsKey != c.pinsKey {
-            c.pinsKey = pinsKey
-            map.removeAnnotations(map.annotations.filter { $0 is ResultAnnotation })
-            map.addAnnotations(pins.map(ResultAnnotation.init))
-        }
-
-        let selected = map.selectedAnnotations.compactMap { $0 as? ResultAnnotation }.first?.pin.index
-        if selected != selection.wrappedValue {
-            if let index = selection.wrappedValue,
-               let annotation = map.annotations.compactMap({ $0 as? ResultAnnotation }).first(where: { $0.pin.index == index }) {
-                map.selectAnnotation(annotation, animated: true)
-            } else {
-                for a in map.selectedAnnotations { map.deselectAnnotation(a, animated: true) }
-            }
-        }
-
         if let focus, focus.id != c.focusID {
             c.focusID = focus.id
             map.setRegion(map.regionThatFits(focus.region), animated: true)
         }
     }
 
-    final class ResultAnnotation: NSObject, MKAnnotation {
-        let pin: ResultPin
-        var coordinate: CLLocationCoordinate2D { pin.coordinate }
-        init(_ pin: ResultPin) { self.pin = pin }
-    }
-
-    final class Coordinator: NSObject, MKMapViewDelegate {
+    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         var parent: CurbMapView
         var areaVersion = -1
         var areaOverlays: [MKOverlay] = []
         var highlightsKey = Int.min
         var highlightOverlays: [MKOverlay] = []
-        var pinsKey = ""
         var focusID: Int?
+        /// The drawn street lines, for hit-testing taps.
+        var segments: [CurbSegment] = []
+        /// How close a tap must land to a line, in screen points (about a fingertip).
+        static let tapTolerance: CGFloat = 22
         var styles: [ObjectIdentifier: (color: UIColor, width: CGFloat)] = [:]
 
         init(_ parent: CurbMapView) { self.parent = parent }
@@ -549,6 +535,7 @@ struct CurbMapView: UIViewRepresentable {
         func apply(_ layers: AreaLayers, to map: MKMapView) {
             guard layers.version != areaVersion else { return }
             areaVersion = layers.version
+            segments = layers.segments
             map.removeOverlays(areaOverlays)
             areaOverlays = layers.groups.compactMap { group in
                 guard !group.lines.isEmpty else { return nil }
@@ -583,27 +570,72 @@ struct CurbMapView: UIViewRepresentable {
             return renderer
         }
 
-        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            guard let result = annotation as? ResultAnnotation else { return nil }
-            let view = mapView.dequeueReusableAnnotationView(withIdentifier: "pin", for: annotation) as! MKMarkerAnnotationView
-            view.glyphText = "\(result.pin.index + 1)"
-            view.markerTintColor = result.pin.color
-            view.titleVisibility = .hidden
-            view.subtitleVisibility = .hidden
-            view.displayPriority = .required
-            return view
+        // MARK: Tapping a street
+
+        /// A single tap picks the street under the finger. It waits for a
+        /// double tap to fail, so double-tap-to-zoom doesn't also select.
+        func addTapRecognizer(to map: MKMapView) {
+            let doubleTap = UITapGestureRecognizer(target: nil, action: nil)
+            doubleTap.numberOfTapsRequired = 2
+            doubleTap.delegate = self
+            let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+            tap.delegate = self
+            tap.require(toFail: doubleTap)
+            map.addGestureRecognizer(doubleTap)
+            map.addGestureRecognizer(tap)
         }
 
-        func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
-            guard let result = annotation as? ResultAnnotation else { return }
-            DispatchQueue.main.async { self.parent.selection.wrappedValue = result.pin.index }
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, let map = gesture.view as? MKMapView, let onTap = parent.onTapCurb else { return }
+            onTap(curb(at: gesture.location(in: map), in: map))
         }
 
-        func mapView(_ mapView: MKMapView, didDeselect annotation: MKAnnotation) {
-            guard let result = annotation as? ResultAnnotation else { return }
-            DispatchQueue.main.async {
-                if self.parent.selection.wrappedValue == result.pin.index { self.parent.selection.wrappedValue = nil }
+        /// The street side whose drawn line is closest to `point`, if any is
+        /// within `tapTolerance`.
+        func curb(at point: CGPoint, in map: MKMapView) -> AreaBlockface? {
+            let tolerance = Self.tapTolerance
+            var best: (blockface: AreaBlockface, distance: CGFloat)?
+            for segment in segments {
+                let points = segment.line.map { map.convert($0, toPointTo: map) }
+                guard var previous = points.first else { continue }
+                // Cheap reject: the tap is nowhere near this line's box.
+                let xs = points.map(\.x), ys = points.map(\.y)
+                guard point.x >= xs.min()! - tolerance, point.x <= xs.max()! + tolerance,
+                      point.y >= ys.min()! - tolerance, point.y <= ys.max()! + tolerance else { continue }
+                var nearest = hypot(point.x - previous.x, point.y - previous.y)
+                for next in points.dropFirst() {
+                    nearest = min(nearest, Self.distance(from: point, toSegment: previous, next))
+                    previous = next
+                }
+                if nearest <= tolerance, nearest < (best?.distance ?? .infinity) {
+                    best = (segment.blockface, nearest)
+                }
             }
+            return best?.blockface
+        }
+
+        static func distance(from p: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> CGFloat {
+            let dx = b.x - a.x, dy = b.y - a.y
+            let lengthSquared = dx * dx + dy * dy
+            guard lengthSquared > 0 else { return hypot(p.x - a.x, p.y - a.y) }
+            let t = max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared))
+            return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            // Let the map keep its own pan, zoom and double-tap gestures.
+            true
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            // Not for taps on the location button or the blue dot.
+            var view = touch.view
+            while let v = view, v !== gestureRecognizer.view {
+                if v is UIControl || v is MKAnnotationView { return false }
+                view = v.superview
+            }
+            return true
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
@@ -635,6 +667,13 @@ struct CurbLegend: View {
 extension Spot {
     func kind(filters: CurbFilters) -> CurbLine.Kind {
         CurbLine.kind(canParkNow: true, freeNow: freeNow, timeLimitMinutes: timeLimitMinutes, postedLimitMinutes: postedLimitMinutes,
+                      restrictionInMinutes: restrictionInMinutes, filters: filters)
+    }
+}
+
+extension AreaBlockface {
+    func kind(filters: CurbFilters) -> CurbLine.Kind {
+        CurbLine.kind(canParkNow: canParkNow, freeNow: freeNow, timeLimitMinutes: timeLimitMinutes, postedLimitMinutes: postedLimitMinutes,
                       restrictionInMinutes: restrictionInMinutes, filters: filters)
     }
 }
