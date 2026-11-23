@@ -120,7 +120,7 @@ struct ParkingEngine: Sendable {
             guard path.count >= 2 else { return nil }
             let s = BlockfaceStatus(b.rules, at: now, permitZone: permitZone, rpzHours: rpzHours)
             return AreaBlockface(
-                street: s.street, streetLabel: s.streetLabel, side: s.side, summary: s.summary,
+                street: s.street, streetLabel: s.streetLabel, side: s.side, summary: s.summary, schedule: s.schedule,
                 canParkNow: s.canParkNow, freeNow: s.freeNow, timeLimitMinutes: s.timeLimitMinutes,
                 postedLimitMinutes: s.postedLimitMinutes, restrictionInMinutes: s.restrictionInMinutes, path: path
             )
