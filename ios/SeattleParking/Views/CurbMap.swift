@@ -434,6 +434,8 @@ struct CurbMapView: UIViewRepresentable {
     /// Changes whenever `highlights` should be redrawn.
     var highlightsKey: Int = 0
     var pins: [ResultPin] = []
+    /// The address searched for, if any.
+    var destination: SearchedPlace?
     var selection: Binding<Int?> = .constant(nil)
     var focus: MapFocus?
     var interactive = true
@@ -511,6 +513,13 @@ struct CurbMapView: UIViewRepresentable {
             map.addAnnotations(pins.map(ResultAnnotation.init))
         }
 
+        let destinationKey = destination.map { "\($0.name):\($0.coordinate.latitude),\($0.coordinate.longitude)" } ?? ""
+        if destinationKey != c.destinationKey {
+            c.destinationKey = destinationKey
+            map.removeAnnotations(map.annotations.filter { $0 is DestinationAnnotation })
+            if let destination { map.addAnnotation(DestinationAnnotation(destination)) }
+        }
+
         let selected = map.selectedAnnotations.compactMap { $0 as? ResultAnnotation }.first?.pin.index
         if selected != selection.wrappedValue {
             if let index = selection.wrappedValue,
@@ -533,6 +542,15 @@ struct CurbMapView: UIViewRepresentable {
         init(_ pin: ResultPin) { self.pin = pin }
     }
 
+    final class DestinationAnnotation: NSObject, MKAnnotation {
+        let coordinate: CLLocationCoordinate2D
+        let title: String?
+        init(_ place: SearchedPlace) {
+            coordinate = place.coordinate
+            title = place.name
+        }
+    }
+
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: CurbMapView
         var areaVersion = -1
@@ -540,6 +558,7 @@ struct CurbMapView: UIViewRepresentable {
         var highlightsKey = Int.min
         var highlightOverlays: [MKOverlay] = []
         var pinsKey = ""
+        var destinationKey = ""
         var focusID: Int?
         var styles: [ObjectIdentifier: (color: UIColor, width: CGFloat)] = [:]
 
@@ -584,8 +603,19 @@ struct CurbMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation is DestinationAnnotation {
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: "pin", for: annotation) as! MKMarkerAnnotationView
+                view.glyphText = nil
+                view.glyphImage = UIImage(systemName: "mappin")
+                view.markerTintColor = .systemIndigo
+                view.titleVisibility = .adaptive
+                view.subtitleVisibility = .hidden
+                view.displayPriority = .required
+                return view
+            }
             guard let result = annotation as? ResultAnnotation else { return nil }
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "pin", for: annotation) as! MKMarkerAnnotationView
+            view.glyphImage = nil
             view.glyphText = "\(result.pin.index + 1)"
             view.markerTintColor = result.pin.color
             view.titleVisibility = .hidden
