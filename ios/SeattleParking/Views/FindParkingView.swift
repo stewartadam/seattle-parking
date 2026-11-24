@@ -26,6 +26,8 @@ struct FindParkingView: View {
     @State private var area = AreaCurbs()
     /// Quantized zoom, so result lines only shift when the zoom changes noticeably.
     @State private var zoomStep: Int?
+    /// Why the search started downtown instead of where you are, if it did.
+    @State private var startNote: String?
 
     /// Searches reach at most 1.5 km from the center point.
     private static let maxRadiusMeters = 1500.0
@@ -33,6 +35,7 @@ struct FindParkingView: View {
     var body: some View {
         VStack(spacing: 0) {
             filterBar
+            if let startNote { StartNote(text: startNote) }
             ZStack(alignment: .top) {
                 map
                 searchAreaButton
@@ -239,7 +242,9 @@ struct FindParkingView: View {
                 center = region.center
                 radius = Int(min(max(halfDiagonal, 50), Self.maxRadiusMeters))
             } else {
-                center = try await LocationProvider.current()
+                let start = await startingPoint()
+                center = start.center
+                startNote = start.note
                 if focus == nil { moveMap(to: MKCoordinateRegion(center: center, latitudinalMeters: 500, longitudinalMeters: 500)) }
             }
             let answer = try await api.nearby(
@@ -268,6 +273,36 @@ struct FindParkingView: View {
         } catch {
             nearby = .failed(errorMessage(error))
         }
+    }
+}
+
+extension FindParkingView {
+    /// Where a search "around me" starts: your location when you're in Seattle,
+    /// otherwise downtown, with a note saying why. The app only has Seattle's
+    /// data, so a search anywhere else would come back empty.
+    func startingPoint() async -> (center: CLLocationCoordinate2D, note: String?) {
+        do {
+            let here = try await LocationProvider.current()
+            if SeattleArea.contains(here) { return (here, nil) }
+            return (SeattleArea.downtown, "You're outside Seattle, so this starts downtown. Seattle Parking only covers the City of Seattle.")
+        } catch {
+            return (SeattleArea.downtown, "Couldn't get your location, so this starts downtown. Seattle Parking only covers the City of Seattle.")
+        }
+    }
+}
+
+/// A one-line banner above the map explaining why it isn't showing your location.
+private struct StartNote: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "location.slash")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color(.secondarySystemBackground))
     }
 }
 

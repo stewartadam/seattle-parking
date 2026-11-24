@@ -6,6 +6,8 @@ import SwiftUI
 struct HomeView: View {
     @State private var showSettings = false
     @State private var here: Loadable<HereResponse> = .idle
+    /// You're outside Seattle, where the app has no data.
+    @State private var outsideSeattle = false
     @State private var locationManager = CLLocationManager()
 
     var body: some View {
@@ -43,32 +45,38 @@ struct HomeView: View {
 
     private var hereSection: some View {
         Section {
-            switch here {
-            case .idle, .loading:
-                HStack(spacing: 12) {
-                    ProgressView()
-                    Text("Checking the street you're on…").foregroundStyle(.secondary)
-                }
-            case .failed(let message):
-                Label(message, systemImage: "exclamationmark.triangle")
+            if outsideSeattle {
+                Label("You're outside Seattle. Seattle Parking only covers the City of Seattle, but you can look around downtown in Find Parking.",
+                      systemImage: "location.slash")
                     .foregroundStyle(.secondary)
-            case .loaded(let answer):
-                if answer.blockfaces.isEmpty {
-                    Text(answer.speech)
-                }
-                if answer.blockfaces.contains(where: { $0.curbCoordinates != nil }) {
-                    HereMap(blockfaces: answer.blockfaces)
-                        .frame(height: 150)
-                        .listRowInsets(EdgeInsets())
-                }
-                ForEach(answer.blockfaces, id: \.self) { BlockfaceRow(blockface: $0) }
-                if let zone = answer.rpzZone?.zone {
-                    Label(
-                        "RPZ zone \(zone)" + (answer.rpzZone?.inEffect.map { " · \($0)" } ?? ""),
-                        systemImage: "person.text.rectangle"
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            } else {
+                switch here {
+                case .idle, .loading:
+                    HStack(spacing: 12) {
+                        ProgressView()
+                        Text("Checking the street you're on…").foregroundStyle(.secondary)
+                    }
+                case .failed(let message):
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.secondary)
+                case .loaded(let answer):
+                    if answer.blockfaces.isEmpty {
+                        Text(answer.speech)
+                    }
+                    if answer.blockfaces.contains(where: { $0.curbCoordinates != nil }) {
+                        HereMap(blockfaces: answer.blockfaces)
+                            .frame(height: 150)
+                            .listRowInsets(EdgeInsets())
+                    }
+                    ForEach(answer.blockfaces, id: \.self) { BlockfaceRow(blockface: $0) }
+                    if let zone = answer.rpzZone?.zone {
+                        Label(
+                            "RPZ zone \(zone)" + (answer.rpzZone?.inEffect.map { " · \($0)" } ?? ""),
+                            systemImage: "person.text.rectangle"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
         } header: {
@@ -117,9 +125,11 @@ struct HomeView: View {
 
     private func loadHere() async {
         here = .loading
+        outsideSeattle = false
         do {
             let api = try ParkingAPI.fromSettings()
             let coordinate = try await LocationProvider.current()
+            outsideSeattle = !SeattleArea.contains(coordinate)
             here = .loaded(try await api.here(coordinate))
         } catch {
             here = .failed(errorMessage(error))
