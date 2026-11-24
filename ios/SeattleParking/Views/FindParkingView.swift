@@ -217,6 +217,13 @@ struct FindParkingView: View {
         Task {
             try? await Task.sleep(for: .milliseconds(250))
             guard id == searchID else { return }
+            if let back = await SeattleArea.pulledBackToStreets(region) {
+                // No streets in view: slide back to the nearest ones. The list
+                // follows once the map lands there.
+                guard id == searchID else { return }
+                focus = MapFocus(id: (focus?.id ?? 0) + 1, region: back)
+                return
+            }
             await search(.region(region))
         }
     }

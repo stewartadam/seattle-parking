@@ -35,6 +35,32 @@ enum SeattleArea {
         region.contains(c)
     }
 
+    /// The map's bounds are a rectangle, and its corners and edges are partly
+    /// open water (Shilshole, Lake Washington, Elliott Bay). When a map near
+    /// that edge shows no streets at all, this is the same-size region moved
+    /// just far enough that the nearest street sits halfway between the middle
+    /// and the edge. Nil when streets are in view, away from the edge (so
+    /// Green Lake or a big park isn't pushed away), or before the city data
+    /// is on the phone.
+    static func pulledBackToStreets(_ region: MKCoordinateRegion) async -> MKCoordinateRegion? {
+        let c = region.center
+        // Within about 1.5 km of the city's box.
+        let nearEdge = c.latitude < south + 0.0135 || c.latitude > north - 0.0135
+            || c.longitude < west + 0.02 || c.longitude > east - 0.02
+        guard nearEdge, let city = try? await CityData.shared.readySource() else { return nil }
+        let halfHeight = region.span.latitudeDelta * 111_320 / 2
+        let halfWidth = region.span.longitudeDelta * 111_320 * cos(c.latitude * .pi / 180) / 2
+        let inView = min(halfHeight, halfWidth) * 0.8
+        let origin = Coordinate(c)
+        if let near = try? await city.blockfaces(near: origin, radiusMeters: inView), !near.isEmpty { return nil }
+        guard let nearest = try? await city.blockfaces(near: origin, radiusMeters: 6_000).first,
+              nearest.distance > 0 else { return nil }
+        let f = max(0, (nearest.distance - inView * 0.5) / nearest.distance)
+        let center = CLLocationCoordinate2D(latitude: c.latitude + (nearest.point.lat - c.latitude) * f,
+                                            longitude: c.longitude + (nearest.point.lon - c.longitude) * f)
+        return MKCoordinateRegion(center: center, span: region.span)
+    }
+
     /// The opening view of downtown.
     static let downtownRegion = MKCoordinateRegion(center: downtown, latitudinalMeters: 500, longitudinalMeters: 500)
 }
