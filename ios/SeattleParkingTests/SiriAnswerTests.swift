@@ -62,6 +62,10 @@ final class SiriAnswerTests: XCTestCase {
                        "The closest spot overnight is about 200 feet south, on Northwest 64th Street: free, no posted time limit.")
         XCTAssertEqual(ParkingText.briefSpeech(closest: spot(direction: nil, meters: 10), stay: "for 2 hours"),
                        "You can park right here for 2 hours, on Northwest 64th Street: free, no posted time limit.")
+        XCTAssertEqual(ParkingText.briefSpeech(closest: spot(direction: "north", meters: 60), near: "Lighthouse Coffee Roasters"),
+                       "The closest spot is about 200 feet north of Lighthouse Coffee Roasters, on Northwest 64th Street: free, no posted time limit.")
+        XCTAssertEqual(ParkingText.briefSpeech(closest: spot(direction: nil, meters: 10), near: "Lighthouse Coffee Roasters"),
+                       "You can park right by Lighthouse Coffee Roasters, on Northwest 64th Street: free, no posted time limit.")
     }
 
     func testBriefAnswersFromRecordedData() async throws {

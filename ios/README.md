@@ -9,19 +9,20 @@ Answers are kept short because you're probably driving: Siri says only the close
 | Say | What happens |
 | --- | --- |
 | "Parking rules here in Seattle Parking" | Says the rules on the street you're on and shows a card with both sides. |
-| "Find parking with Seattle Parking" | Says the closest legal spot, shows a few more on a card, then asks **"Want directions?"** Saying yes opens Apple Maps. |
+| "Find parking with Seattle Parking" | Says the closest legal spot, shows a few more on a card, then asks **"Want directions?"** Saying yes opens Apple Maps. If you can park right where you are, Siri just says so. |
 | "Find parking for two hours with Seattle Parking" | The same, but only spots where you can stay that long. Siri understands one hour, two hours, four hours and overnight ("Find overnight parking", "Find parking until morning"). |
 | "Find parking until a certain time with Seattle Parking" | Siri asks "Until when?" and understands answers like "9 AM tomorrow". |
+| "Find parking near a place with Seattle Parking" | Siri asks "Near where?" and looks up the answer ("Lighthouse Coffee Roasters") with Apple Maps, limited to Seattle. Also works with a stay: "Find overnight parking near a place". |
 
 Other variations Siri recognizes: "Can I park here with Seattle Parking", "Where can I park with Seattle Parking", "Find a spot with Seattle Parking", "Where can I park overnight with Seattle Parking".
 
-Siri phrases can only hold values from a fixed list, which is why a time like "until 9 AM tomorrow" takes the second question. "Overnight" means until 8 AM the next morning. A stay past midnight is checked against the next day's rules too, so a block that turns into a rush-hour tow-away zone in the morning is left out.
+Siri phrases can only hold values from a fixed list, which is why a time like "until 9 AM tomorrow" or a place name takes a second question. "Overnight" means until 8 AM the next morning. A stay past midnight is checked against the next day's rules too, so a block that turns into a rush-hour tow-away zone in the morning is left out.
 
 In Shortcuts, **Find Parking** also takes "Staying for" and "Free only", and **Find Parking Until a Time** takes any time.
 
 ## Build and install
 
-Requires Xcode 16 or later, iOS 18 or later, and a paid or free Apple developer account.
+Requires Xcode 16 or later, iOS 18.2 or later, and a paid or free Apple developer account.
 
 ```sh
 brew install xcodegen

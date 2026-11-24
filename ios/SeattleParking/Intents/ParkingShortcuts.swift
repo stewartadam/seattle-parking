@@ -41,5 +41,16 @@ struct ParkingShortcuts: AppShortcutsProvider {
             shortTitle: "Find Parking Until…",
             systemImageName: "clock"
         )
+        AppShortcut(
+            intent: FindParkingNearIntent(),
+            phrases: [
+                "Find parking near a place with \(.applicationName)",
+                "Find parking somewhere else with \(.applicationName)",
+                "Find parking for \(\.$stay) near a place with \(.applicationName)",
+                "Find \(\.$stay) parking near a place with \(.applicationName)",
+            ],
+            shortTitle: "Find Parking Near…",
+            systemImageName: "mappin.circle"
+        )
     }
 }

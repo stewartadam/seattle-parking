@@ -4,7 +4,7 @@ import MapKit
 import Observation
 
 /// A place picked in the address search.
-struct SearchedPlace {
+struct SearchedPlace: Sendable {
     let name: String
     let coordinate: CLLocationCoordinate2D
 }
