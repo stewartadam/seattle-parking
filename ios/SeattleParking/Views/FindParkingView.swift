@@ -286,6 +286,9 @@ struct FindParkingView: View {
     private func pick(_ suggestion: MKLocalSearchCompletion?) async {
         let text = addressSearch.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard suggestion != nil || !text.isEmpty else { return }
+        // Closing the search bar resizes the map, and that camera stop must not
+        // start a map-center search that would drop this lookup's result.
+        followMap = false
         addressSearchShown = false
         nearby = .loading
         searchID += 1
@@ -303,6 +306,7 @@ struct FindParkingView: View {
             await search(.place(place))
         } catch {
             guard id == searchID else { return }
+            followMap = true
             nearby = .failed(addressErrorMessage(error))
         }
     }
