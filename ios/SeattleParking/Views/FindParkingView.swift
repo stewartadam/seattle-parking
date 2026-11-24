@@ -189,6 +189,7 @@ struct FindParkingView: View {
             destination: destination,
             focus: focus,
             onTapCurb: { curb in withAnimation(.snappy) { selected = curb } },
+            selectedCurbID: selected?.id,
             onRegionChange: { region, width in cameraSettled(region, width: width) }
         )
     }

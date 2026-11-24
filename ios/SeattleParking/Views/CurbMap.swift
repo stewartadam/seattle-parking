@@ -445,6 +445,9 @@ struct CurbMapView: UIViewRepresentable {
     /// Called with the street side under a tap, or nil for a tap away from
     /// any street. Leave nil to ignore taps.
     var onTapCurb: ((AreaBlockface?) -> Void)?
+    /// The street side currently picked, so tapping it again switches to the
+    /// other side of the street.
+    var selectedCurbID: String?
     var onRegionChange: (MKCoordinateRegion, CGFloat) -> Void = { _, _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -607,7 +610,42 @@ struct CurbMapView: UIViewRepresentable {
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended, let map = gesture.view as? MKMapView, let onTap = parent.onTapCurb else { return }
-            onTap(curb(at: gesture.location(in: map), in: map))
+            let point = gesture.location(in: map)
+            let tapped = curb(at: point, in: map)
+            if let tapped, tapped.id == parent.selectedCurbID {
+                // Same street again: flip to the other side (or stay put if
+                // there's no data for it).
+                onTap(otherSide(of: tapped, in: map) ?? tapped)
+            } else {
+                onTap(tapped)
+            }
+        }
+
+        /// The other side of the same block: a line on the same street, on a
+        /// different side, running right alongside this one.
+        func otherSide(of curb: AreaBlockface, in map: MKMapView) -> AreaBlockface? {
+            guard let middle = segments.first(where: { $0.blockface.id == curb.id })?.line.midpoint
+                ?? curb.path.midpoint else { return nil }
+            let anchor = map.convert(middle, toPointTo: map)
+            var best: (blockface: AreaBlockface, distance: CGFloat)?
+            for segment in segments where segment.blockface.street == curb.street
+                && segment.blockface.side != curb.side && segment.blockface.id != curb.id {
+                let d = Self.distance(from: anchor, toLine: segment.line.map { map.convert($0, toPointTo: map) })
+                // An adjacent block on the same street is half a block away; the
+                // opposite curb is a few points.
+                if d <= Self.tapTolerance * 2, d < (best?.distance ?? .infinity) { best = (segment.blockface, d) }
+            }
+            return best?.blockface
+        }
+
+        static func distance(from p: CGPoint, toLine points: [CGPoint]) -> CGFloat {
+            guard var previous = points.first else { return .infinity }
+            var nearest = hypot(p.x - previous.x, p.y - previous.y)
+            for next in points.dropFirst() {
+                nearest = min(nearest, distance(from: p, toSegment: previous, next))
+                previous = next
+            }
+            return nearest
         }
 
         /// The street side whose drawn line is closest to `point`, if any is
@@ -617,16 +655,12 @@ struct CurbMapView: UIViewRepresentable {
             var best: (blockface: AreaBlockface, distance: CGFloat)?
             for segment in segments {
                 let points = segment.line.map { map.convert($0, toPointTo: map) }
-                guard var previous = points.first else { continue }
+                guard !points.isEmpty else { continue }
                 // Cheap reject: the tap is nowhere near this line's box.
                 let xs = points.map(\.x), ys = points.map(\.y)
                 guard point.x >= xs.min()! - tolerance, point.x <= xs.max()! + tolerance,
                       point.y >= ys.min()! - tolerance, point.y <= ys.max()! + tolerance else { continue }
-                var nearest = hypot(point.x - previous.x, point.y - previous.y)
-                for next in points.dropFirst() {
-                    nearest = min(nearest, Self.distance(from: point, toSegment: previous, next))
-                    previous = next
-                }
+                let nearest = Self.distance(from: point, toLine: points)
                 if nearest <= tolerance, nearest < (best?.distance ?? .infinity) {
                     best = (segment.blockface, nearest)
                 }
@@ -761,5 +795,12 @@ struct HereMap: View {
     private var hereRegion: MKCoordinateRegion {
         let points = blockfaces.flatMap { ($0.path ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) } }
         return MKCoordinateRegion.fitting(points, minimumMeters: 250)
+    }
+}
+
+extension Array where Element == CLLocationCoordinate2D {
+    /// Halfway along the line (by distance), or nil when it's empty.
+    var midpoint: CLLocationCoordinate2D? {
+        map { Coordinate(lat: $0.latitude, lon: $0.longitude) }.midpoint
     }
 }
