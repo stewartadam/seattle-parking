@@ -56,14 +56,8 @@ struct SpotsSnippet: View {
                         .font(.headline)
                         .frame(width: 24, height: 24)
                         .background(Circle().fill(Color(spot.kind(filters: CurbFilters(stayingMinutes: minutes)).color).opacity(0.3)))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(spot.displayStreet).font(.subheadline.bold()).lineLimit(2)
-                        Text(spot.summary).font(.subheadline)
-                        if let schedule = spot.schedule {
-                            Text(schedule).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-                        }
-                        Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
-                    }
+                    StreetDescription(label: spot.displayStreet, side: spot.side, distanceMeters: spot.distanceMeters,
+                                      summary: spot.summary, schedule: spot.schedule)
                 }
             }
         }
