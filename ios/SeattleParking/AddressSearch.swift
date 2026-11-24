@@ -34,7 +34,7 @@ final class AddressSearch: NSObject, MKLocalSearchCompleterDelegate {
 
     var query = "" {
         didSet {
-            guard query != oldValue else { return }
+            guard query != oldValue, !showingPlace else { return }
             let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
             if text.isEmpty {
                 completer.cancel()
@@ -46,6 +46,16 @@ final class AddressSearch: NSObject, MKLocalSearchCompleterDelegate {
     }
 
     @ObservationIgnored private let completer = MKLocalSearchCompleter()
+    @ObservationIgnored private var showingPlace = false
+
+    /// Puts a found place's name in the search field without looking it up again.
+    func show(_ place: SearchedPlace) {
+        showingPlace = true
+        query = place.name
+        showingPlace = false
+        completer.cancel()
+        suggestions = []
+    }
 
     /// Roughly the city limits, padded a little.
     nonisolated static let seattleBounds = (minLat: 47.48, maxLat: 47.75, minLon: -122.46, maxLon: -122.22)

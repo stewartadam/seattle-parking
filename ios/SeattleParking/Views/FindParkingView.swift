@@ -42,7 +42,8 @@ struct FindParkingView: View {
     @State private var addressSearchShown = false
     /// When a suggestion was last tapped, so a Search submit right after it is ignored.
     @State private var suggestionPickedAt: Date?
-    /// The address picked in the search bar; shown as a pin and a chip.
+    /// The address picked in the search bar; shown as a pin. Clearing the
+    /// search field removes it.
     @State private var destination: SearchedPlace?
 
     /// Searches reach at most 1.5 km from the center point.
@@ -97,6 +98,9 @@ struct FindParkingView: View {
             Task { await pick(nil) }
         }
         .autocorrectionDisabled()
+        .onChange(of: addressSearch.query) {
+            if addressSearch.query.isEmpty { destination = nil }
+        }
         .task { if case .idle = nearby { await search(.me) } }
         .onAppear { area.setFilters(filters) }
         .onChange(of: filters) {
@@ -137,16 +141,7 @@ struct FindParkingView: View {
             }
             .accessibilityAddTraits(freeOnly ? .isSelected : [])
 
-            if let destination {
-                // Tapping it goes back to searching around you.
-                Button { clearDestination() } label: {
-                    FilterChip(title: destination.name, systemImage: "xmark", isOn: true)
-                }
-                .accessibilityLabel("Near \(destination.name)")
-                .accessibilityHint("Search around you instead")
-            }
-
-            Spacer(minLength: 0)
+            Spacer()
         }
         .padding(.horizontal)
         .padding(.top, 8)
@@ -312,18 +307,13 @@ struct FindParkingView: View {
                 place = try await addressSearch.place(matching: text)
             }
             guard id == searchID else { return }
-            addressSearch.query = ""
             destination = place
+            addressSearch.show(place)
             await search(.place(place))
         } catch {
             guard id == searchID else { return }
             nearby = .failed(addressErrorMessage(error))
         }
-    }
-
-    private func clearDestination() {
-        destination = nil
-        Task { await search(.me) }
     }
 
     private func addressErrorMessage(_ error: Error) -> String {
@@ -384,8 +374,15 @@ struct FindParkingView: View {
             } else if !answer.results.isEmpty {
                 // Fit the starting point and the results only. (.automatic would also
                 // fit the street-color lines, which zoom the map out as they load.)
-                let points = [center] + answer.results.flatMap { spot in
+                var points = [center] + answer.results.flatMap { spot in
                     [spot.zoneCenter] + (spot.path ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+                }
+                if case .place = origin {
+                    // Keep the searched place in the middle: mirror every point around it.
+                    points += points.map {
+                        CLLocationCoordinate2D(latitude: 2 * center.latitude - $0.latitude,
+                                               longitude: 2 * center.longitude - $0.longitude)
+                    }
                 }
                 moveMap(to: MKCoordinateRegion.fitting(points, minimumMeters: 300))
             } else if pendingMove == nil {
@@ -408,7 +405,7 @@ private struct FilterChip: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: systemImage).imageScale(.small)
-            Text(title).lineLimit(1)
+            Text(title)
             if isMenu { Image(systemName: "chevron.down").imageScale(.small) }
         }
         .font(.subheadline.weight(.semibold))
