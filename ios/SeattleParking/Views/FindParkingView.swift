@@ -40,6 +40,8 @@ struct FindParkingView: View {
 
     @State private var addressSearch = AddressSearch()
     @State private var addressSearchShown = false
+    /// When a suggestion was last tapped, so a Search submit right after it is ignored.
+    @State private var suggestionPickedAt: Date?
     /// The address picked in the search bar; shown as a pin and a chip.
     @State private var destination: SearchedPlace?
 
@@ -77,6 +79,7 @@ struct FindParkingView: View {
         .searchSuggestions {
             ForEach(Array(addressSearch.suggestions.enumerated()), id: \.offset) { _, suggestion in
                 Button {
+                    suggestionPickedAt = Date()
                     Task { await pick(suggestion) }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
@@ -88,7 +91,11 @@ struct FindParkingView: View {
                 }
             }
         }
-        .onSubmit(of: .search) { Task { await pick(nil) } }
+        .onSubmit(of: .search) {
+            // A tap on a suggestion can also submit the field; the suggestion wins.
+            if let picked = suggestionPickedAt, Date().timeIntervalSince(picked) < 1 { return }
+            Task { await pick(nil) }
+        }
         .autocorrectionDisabled()
         .task { if case .idle = nearby { await search(.me) } }
         .onAppear { area.setFilters(filters) }

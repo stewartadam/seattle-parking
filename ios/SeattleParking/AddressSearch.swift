@@ -70,9 +70,15 @@ final class AddressSearch: NSObject, MKLocalSearchCompleterDelegate {
         completer.resultTypes = [.address, .pointOfInterest]
     }
 
-    /// The place behind a suggestion.
+    /// The place behind a suggestion. The request is left as MapKit builds it
+    /// from the suggestion: changing its area or result types can turn it back
+    /// into a plain text search, which finds a different place with a similar
+    /// name. Of the matches, the one with the suggestion's name wins.
     func place(for completion: MKLocalSearchCompletion) async throws -> SearchedPlace {
-        try await run(MKLocalSearch.Request(completion: completion), fallbackName: completion.title)
+        let items = try await mapItems(for: MKLocalSearch.Request(completion: completion))
+        let title = completion.title.lowercased()
+        let named = items.filter { ($0.name ?? "").lowercased() == title }
+        return try best(of: named.isEmpty ? items : named, fallbackName: completion.title)
     }
 
     /// The best match for typed text (when Search is pressed without picking a suggestion).
@@ -86,13 +92,19 @@ final class AddressSearch: NSObject, MKLocalSearchCompleterDelegate {
         request.region = Self.seattleRegion
         request.regionPriority = .required
         request.resultTypes = [.address, .pointOfInterest]
-        let response: MKLocalSearch.Response
+        return try best(of: try await mapItems(for: request), fallbackName: fallbackName)
+    }
+
+    private func mapItems(for request: MKLocalSearch.Request) async throws -> [MKMapItem] {
         do {
-            response = try await MKLocalSearch(request: request).start()
+            return try await MKLocalSearch(request: request).start().mapItems
         } catch let error as MKError where error.code == .placemarkNotFound {
             throw AddressSearchError.notFound
         }
-        let items = response.mapItems
+    }
+
+    /// The first match inside Seattle.
+    private func best(of items: [MKMapItem], fallbackName: String) throws -> SearchedPlace {
         guard !items.isEmpty else { throw AddressSearchError.notFound }
         guard let item = items.first(where: { Self.isInSeattle($0.placemark.coordinate) }) else {
             throw AddressSearchError.outsideSeattle
