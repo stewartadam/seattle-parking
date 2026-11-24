@@ -27,8 +27,9 @@ struct FindParkingView: View {
     /// What the last search was centered on. Filter changes rerun it.
     @State private var lastOrigin: Origin = .me
     /// Set while the map moves on its own (for a search or a picked result), so
-    /// that move doesn't refresh the list. Camera stops elsewhere (an earlier
-    /// move finishing) still count as the user's.
+    /// that move doesn't refresh the list. Camera stops elsewhere while it's set
+    /// (the map resizing as the search bar closes, or an earlier move finishing)
+    /// are ignored too; if the map never lands, the list follows wherever it ended up.
     @State private var pendingMove: MKCoordinateRegion?
     /// Bumped per search, so a slower earlier search can't overwrite a newer one.
     @State private var searchID = 0
@@ -44,6 +45,9 @@ struct FindParkingView: View {
     @State private var addressSearchShown = false
     /// When a suggestion was last tapped, so a Search submit right after it is ignored.
     @State private var suggestionPickedAt: Date?
+    /// When a picked place's name was put in the search field. Closing the search
+    /// bar can clear the field just after, which mustn't remove the pin.
+    @State private var placeShownAt: Date?
     /// The address picked in the search bar; shown as a pin. Clearing the
     /// search field removes it.
     @State private var destination: SearchedPlace?
@@ -99,7 +103,13 @@ struct FindParkingView: View {
         }
         .autocorrectionDisabled()
         .onChange(of: addressSearch.query) {
-            if addressSearch.query.isEmpty { destination = nil }
+            guard addressSearch.query.isEmpty else { return }
+            if let destination, let shown = placeShownAt, Date().timeIntervalSince(shown) < 1 {
+                // The search bar closing cleared it, not the user: put the name back.
+                addressSearch.show(destination)
+            } else {
+                destination = nil
+            }
         }
         .task { if case .idle = nearby { await search(.me) } }
         .onAppear { area.setFilters(filters) }
@@ -203,15 +213,22 @@ struct FindParkingView: View {
         let step = CurbLine.zoomStep(mpp)
         if step != zoomStep { zoomStep = step }
         area.cameraSettled(region: region, metersPerPoint: mpp)
-        if let target = pendingMove,
-           region.center.distance(to: target.center) <= max(target.halfDiagonalMeters * 0.1, 25) {
-            // Our own move landed; the list already matches it.
-            pendingMove = nil
+        if let target = pendingMove {
+            if region.center.distance(to: target.center) <= max(target.halfDiagonalMeters * 0.1, 25) {
+                // Our own move landed; the list already matches it.
+                pendingMove = nil
+            }
+            // Otherwise it's a stop on the way there (or the map resizing): wait
+            // for it to land, or for moveMap's timeout.
             return
         }
+        followMapCenter(region)
+    }
+
+    /// The user moved the map: re-rank the list from its center. Waits a moment
+    /// so a quick series of drags only searches once.
+    private func followMapCenter(_ region: MKCoordinateRegion) {
         guard followMap else { return }
-        // The user moved the map: re-rank the list from its center. Wait a
-        // moment so a quick series of drags only searches once.
         searchID += 1
         let id = searchID
         Task {
@@ -224,6 +241,8 @@ struct FindParkingView: View {
                 focus = MapFocus(id: (focus?.id ?? 0) + 1, region: back)
                 return
             }
+            // An address pick may have started while that ran.
+            guard id == searchID, followMap else { return }
             await search(.region(region))
         }
     }
@@ -237,7 +256,11 @@ struct FindParkingView: View {
             // If the map never reports landing there (it was already there, or
             // the user grabbed it mid-move), stop waiting.
             try? await Task.sleep(for: .seconds(2))
-            if focus?.id == id { pendingMove = nil }
+            guard focus?.id == id, pendingMove != nil else { return }
+            pendingMove = nil
+            // It never landed: the user grabbed the map mid-move (or it was
+            // already there). Follow wherever it is now.
+            if let visibleRegion { followMapCenter(visibleRegion) }
         }
     }
 
@@ -303,6 +326,7 @@ struct FindParkingView: View {
             guard id == searchID else { return }
             destination = place
             addressSearch.show(place)
+            placeShownAt = Date()
             await search(.place(place))
         } catch {
             guard id == searchID else { return }
