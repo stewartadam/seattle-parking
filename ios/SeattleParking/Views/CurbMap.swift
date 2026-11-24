@@ -468,7 +468,7 @@ struct CurbMapView: UIViewRepresentable {
         }
         if interactive {
             // The app only has Seattle's data, so keep the map there.
-            map.cameraBoundary = MKMapView.CameraBoundary(coordinateRegion: SeattleArea.region)
+            map.cameraBoundary = MKMapView.CameraBoundary(coordinateRegion: SeattleArea.mapBounds)
             map.cameraZoomRange = MKMapView.CameraZoomRange(
                 minCenterCoordinateDistance: CurbLine.minCameraDistance,
                 maxCenterCoordinateDistance: CurbLine.maxCameraDistance)

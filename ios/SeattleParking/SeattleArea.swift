@@ -16,13 +16,19 @@ enum SeattleArea {
     static let downtown = CLLocationCoordinate2D(latitude: 47.6097, longitude: -122.3422)
 
     /// City limits plus the buffer.
-    static let region: MKCoordinateRegion = {
-        let s = south - bufferLat, n = north + bufferLat
-        let w = west - bufferLon, e = east + bufferLon
+    static let region = box(lat: bufferLat, lon: bufferLon)
+
+    /// Where the map's center may go: the city limits with no buffer, so even
+    /// fully zoomed out at the edge, part of the city (and its zones) is on screen.
+    static let mapBounds = box(lat: 0, lon: 0)
+
+    private static func box(lat: Double, lon: Double) -> MKCoordinateRegion {
+        let s = south - lat, n = north + lat
+        let w = west - lon, e = east + lon
         return MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: (s + n) / 2, longitude: (w + e) / 2),
             span: MKCoordinateSpan(latitudeDelta: n - s, longitudeDelta: e - w))
-    }()
+    }
 
     /// True when the point is in Seattle (or within the buffer around it).
     static func contains(_ c: CLLocationCoordinate2D) -> Bool {
