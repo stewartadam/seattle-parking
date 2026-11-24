@@ -438,6 +438,8 @@ struct CurbMapView: UIViewRepresentable {
     var highlights: [HighlightCurb] = []
     /// Changes whenever `highlights` should be redrawn.
     var highlightsKey: Int = 0
+    /// The address searched for, if any; shown as a pin.
+    var destination: SearchedPlace?
     var focus: MapFocus?
     var interactive = true
     /// Called with the street side under a tap, or nil for a tap away from
@@ -452,6 +454,7 @@ struct CurbMapView: UIViewRepresentable {
         map.delegate = context.coordinator
         map.showsUserLocation = true
         map.pointOfInterestFilter = .excludingAll
+        map.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "place")
         if let focus {
             map.setRegion(focus.region, animated: false)
             context.coordinator.focusID = focus.id
@@ -510,9 +513,25 @@ struct CurbMapView: UIViewRepresentable {
             c.pruneStyles(keeping: c.areaOverlays + c.highlightOverlays)
         }
 
+        let destinationKey = destination.map { "\($0.name):\($0.coordinate.latitude),\($0.coordinate.longitude)" } ?? ""
+        if destinationKey != c.destinationKey {
+            c.destinationKey = destinationKey
+            map.removeAnnotations(map.annotations.filter { $0 is DestinationAnnotation })
+            if let destination { map.addAnnotation(DestinationAnnotation(destination)) }
+        }
+
         if let focus, focus.id != c.focusID {
             c.focusID = focus.id
             map.setRegion(map.regionThatFits(focus.region), animated: true)
+        }
+    }
+
+    final class DestinationAnnotation: NSObject, MKAnnotation {
+        let coordinate: CLLocationCoordinate2D
+        let title: String?
+        init(_ place: SearchedPlace) {
+            coordinate = place.coordinate
+            title = place.name
         }
     }
 
@@ -523,6 +542,7 @@ struct CurbMapView: UIViewRepresentable {
         var highlightsKey = Int.min
         var highlightOverlays: [MKOverlay] = []
         var focusID: Int?
+        var destinationKey = ""
         /// The drawn street lines, for hit-testing taps.
         var segments: [CurbSegment] = []
         /// How close a tap must land to a line, in screen points (about a fingertip).
@@ -636,6 +656,17 @@ struct CurbMapView: UIViewRepresentable {
                 view = v.superview
             }
             return true
+        }
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            guard annotation is DestinationAnnotation else { return nil }
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: "place", for: annotation) as! MKMarkerAnnotationView
+            view.glyphImage = UIImage(systemName: "mappin")
+            view.markerTintColor = .systemIndigo
+            view.titleVisibility = .adaptive
+            view.subtitleVisibility = .hidden
+            view.displayPriority = .required
+            return view
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
