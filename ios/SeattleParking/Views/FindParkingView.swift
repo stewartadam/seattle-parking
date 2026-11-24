@@ -104,11 +104,21 @@ struct FindParkingView: View {
         .autocorrectionDisabled()
         .onChange(of: addressSearch.query) {
             guard addressSearch.query.isEmpty else { return }
-            if let destination, let shown = placeShownAt, Date().timeIntervalSince(shown) < 1 {
-                // The search bar closing cleared it, not the user: put the name back.
-                addressSearch.show(destination)
-            } else {
+            guard let shown = placeShownAt, Date().timeIntervalSince(shown) < 1 else {
                 destination = nil
+                return
+            }
+            // Probably the search bar closing, not the user: put the name back.
+            // Wait a moment so the field sees the change; set right away, it
+            // would be merged with the clear and the field would stay empty.
+            Task {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard addressSearch.query.isEmpty else { return }
+                if addressSearchShown {
+                    destination = nil  // The user is clearing it to search again.
+                } else if let destination {
+                    addressSearch.show(destination)
+                }
             }
         }
         .task { if case .idle = nearby { await search(.me) } }
@@ -327,11 +337,25 @@ struct FindParkingView: View {
             destination = place
             addressSearch.show(place)
             placeShownAt = Date()
+            refreshSearchField(showing: place)
             await search(.place(place))
         } catch {
             guard id == searchID else { return }
             followMap = true
             nearby = .failed(addressErrorMessage(error))
+        }
+    }
+
+    /// A search field that's closing can miss the place name being put in it,
+    /// showing the placeholder while it still holds the name. Once it has closed,
+    /// clear the text and let the query handler put the name back, so the field
+    /// redraws with it.
+    private func refreshSearchField(showing place: SearchedPlace) {
+        Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !addressSearchShown, addressSearch.query == place.name else { return }
+            placeShownAt = Date()
+            addressSearch.query = ""
         }
     }
 
