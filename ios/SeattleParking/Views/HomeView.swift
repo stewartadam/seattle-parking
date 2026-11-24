@@ -105,7 +105,7 @@ struct HomeView: View {
                 Label("Find parking nearby", systemImage: "magnifyingglass")
             }
         } footer: {
-            Text("Search around you, then pan the map to look somewhere else.")
+            Text("Search around you or near an address, then pan the map to look somewhere else.")
         }
     }
 

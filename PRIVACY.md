@@ -1,12 +1,13 @@
 # Seattle Parking privacy policy
 
-Last updated: November 17, 2026
+Last updated: November 23, 2026
 
 Seattle Parking looks up street parking rules in Seattle. This page explains what the iPhone app does with your information.
 
 ## What the app uses
 
 - **Your location.** When you ask about parking (in the app, with Siri or on CarPlay), the app reads your current location and looks up the rules for nearby streets in a copy of the City of Seattle's parking data stored on your phone. Your location stays on your phone. The app only reads your location while you're using it.
+- **Addresses you search for.** When you search for an address or place in Find Parking, what you type is sent to Apple Maps to find matches, along with a fixed area covering Seattle. The app doesn't add your location to that search. Once a place is found, its parking rules come from the copy of the city's data on your phone, like any other answer.
 - **Your settings.** The permit zone you enter is stored on your phone only.
 
 ## Downloading the city's data

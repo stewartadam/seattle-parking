@@ -2,25 +2,36 @@ import CoreLocation
 import MapKit
 import SwiftUI
 
-/// The parking search, on its own screen: filters, a map you can pan, and the
-/// results. The first search is around you; after moving the map, "Search this
-/// area" looks inside the visible region instead. Tapping any street on the map
+/// The parking search, on its own screen: an address search, filters, a map
+/// you can pan, and the results. The first search is around you; picking an
+/// address searches around it, and once you move the map, the list follows
+/// the middle of the map. Tapping any street on the map
 /// (or a result) shows that street side's rules in place of the list.
 struct FindParkingView: View {
+    /// Where a search is centered.
+    enum Origin {
+        case me
+        case place(SearchedPlace)
+        case region(MKCoordinateRegion)
+    }
+
     @State private var minMinutes = 0
     @State private var freeOnly = false
     @State private var nearby: Loadable<NearbyResponse> = .idle
     /// Where the map should move to; set when a search starts and when results arrive.
     @State private var focus: MapFocus?
     @State private var visibleRegion: MKCoordinateRegion?
-    /// The region the current results were searched in; when the map moves away
-    /// from it, the "Search this area" button appears.
-    @State private var searchedRegion: MKCoordinateRegion?
-    @State private var mapMoved = false
-    /// The area the last search used; nil means "around me". Filter changes rerun it.
-    @State private var lastQueryRegion: MKCoordinateRegion?
-    /// Set while the map zooms to fit fresh results, so that move isn't the user's.
-    @State private var fittingResults = false
+    /// Off until the first search has answered, so the map's initial moves
+    /// don't replace it.
+    @State private var followMap = false
+    /// What the last search was centered on. Filter changes rerun it.
+    @State private var lastOrigin: Origin = .me
+    /// Set while the map moves on its own (for a search or a picked result), so
+    /// that move doesn't refresh the list. Camera stops elsewhere (an earlier
+    /// move finishing) still count as the user's.
+    @State private var pendingMove: MKCoordinateRegion?
+    /// Bumped per search, so a slower earlier search can't overwrite a newer one.
+    @State private var searchID = 0
     /// The street side picked on the map or in the list; its rules replace the list.
     @State private var selected: AreaBlockface?
     @State private var area = AreaCurbs()
@@ -29,6 +40,14 @@ struct FindParkingView: View {
     /// Why the search started downtown instead of where you are, if it did.
     @State private var startNote: String?
 
+    @State private var addressSearch = AddressSearch()
+    @State private var addressSearchShown = false
+    /// When a suggestion was last tapped, so a Search submit right after it is ignored.
+    @State private var suggestionPickedAt: Date?
+    /// The address picked in the search bar; shown as a pin. Clearing the
+    /// search field removes it.
+    @State private var destination: SearchedPlace?
+
     /// Searches reach at most 1.5 km from the center point.
     private static let maxRadiusMeters = 1500.0
 
@@ -36,10 +55,7 @@ struct FindParkingView: View {
         VStack(spacing: 0) {
             filterBar
             if let startNote { StartNote(text: startNote) }
-            ZStack(alignment: .top) {
-                map
-                searchAreaButton
-            }
+            map
             .overlay(alignment: .bottomLeading) {
                 if area.zoomedOutTooFar { ZoomInHint().allowsHitTesting(false) }
             }
@@ -55,12 +71,42 @@ struct FindParkingView: View {
         }
         .navigationTitle("Find Parking")
         .navigationBarTitleDisplayMode(.inline)
-        .task { if case .idle = nearby { await search(in: nil) } }
+        .searchable(
+            text: $addressSearch.query,
+            isPresented: $addressSearchShown,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search an address or place"
+        )
+        .searchSuggestions {
+            ForEach(Array(addressSearch.suggestions.enumerated()), id: \.offset) { _, suggestion in
+                Button {
+                    suggestionPickedAt = Date()
+                    Task { await pick(suggestion) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(suggestion.title).foregroundStyle(Color.primary)
+                        if !suggestion.subtitle.isEmpty {
+                            Text(suggestion.subtitle).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .onSubmit(of: .search) {
+            // A tap on a suggestion can also submit the field; the suggestion wins.
+            if let picked = suggestionPickedAt, Date().timeIntervalSince(picked) < 1 { return }
+            Task { await pick(nil) }
+        }
+        .autocorrectionDisabled()
+        .onChange(of: addressSearch.query) {
+            if addressSearch.query.isEmpty { destination = nil }
+        }
+        .task { if case .idle = nearby { await search(.me) } }
         .onAppear { area.setFilters(filters) }
         .onChange(of: filters) {
             // Recolor right away; the search below refreshes the results.
             area.setFilters(filters)
-            Task { await search(in: lastQueryRegion) }
+            Task { await search(lastOrigin) }
         }
     }
 
@@ -143,8 +189,10 @@ struct FindParkingView: View {
             area: area,
             highlights: highlights,
             highlightsKey: key.finalize(),
+            destination: destination,
             focus: focus,
             onTapCurb: { curb in withAnimation(.snappy) { selected = curb } },
+            selectedCurbID: selected?.id,
             onRegionChange: { region, width in cameraSettled(region, width: width) }
         )
     }
@@ -155,32 +203,34 @@ struct FindParkingView: View {
         let step = CurbLine.zoomStep(mpp)
         if step != zoomStep { zoomStep = step }
         area.cameraSettled(region: region, metersPerPoint: mpp)
-        if fittingResults {
-            fittingResults = false
-            searchedRegion = region
-            mapMoved = false
-        } else if let searchedRegion {
-            mapMoved = !region.isClose(to: searchedRegion)
+        if let target = pendingMove,
+           region.center.distance(to: target.center) <= max(target.halfDiagonalMeters * 0.1, 25) {
+            // Our own move landed; the list already matches it.
+            pendingMove = nil
+            return
+        }
+        guard followMap else { return }
+        // The user moved the map: re-rank the list from its center. Wait a
+        // moment so a quick series of drags only searches once.
+        searchID += 1
+        let id = searchID
+        Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard id == searchID else { return }
+            await search(.region(region))
         }
     }
 
+    /// Moves the map without refreshing the list when it lands.
     private func moveMap(to region: MKCoordinateRegion) {
-        focus = MapFocus(id: (focus?.id ?? 0) + 1, region: region)
-    }
-
-    @ViewBuilder
-    private var searchAreaButton: some View {
-        if mapMoved, !nearby.isLoading {
-            Button {
-                Task { await search(in: visibleRegion) }
-            } label: {
-                Label("Search this area", systemImage: "magnifyingglass")
-                    .font(.subheadline.bold())
-            }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .shadow(radius: 4)
-            .padding(.top, 12)
+        let id = (focus?.id ?? 0) + 1
+        focus = MapFocus(id: id, region: region)
+        pendingMove = region
+        Task {
+            // If the map never reports landing there (it was already there, or
+            // the user grabbed it mid-move), stop waiting.
+            try? await Task.sleep(for: .seconds(2))
+            if focus?.id == id { pendingMove = nil }
         }
     }
 
@@ -223,25 +273,67 @@ struct FindParkingView: View {
         }
     }
 
+    // MARK: - Address search
+
+    /// Looks up a suggestion (or, with nil, the typed text) and searches around it.
+    private func pick(_ suggestion: MKLocalSearchCompletion?) async {
+        let text = addressSearch.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard suggestion != nil || !text.isEmpty else { return }
+        addressSearchShown = false
+        nearby = .loading
+        searchID += 1
+        let id = searchID
+        do {
+            let place: SearchedPlace
+            if let suggestion {
+                place = try await addressSearch.place(for: suggestion)
+            } else {
+                place = try await addressSearch.place(matching: text)
+            }
+            guard id == searchID else { return }
+            destination = place
+            addressSearch.show(place)
+            await search(.place(place))
+        } catch {
+            guard id == searchID else { return }
+            nearby = .failed(addressErrorMessage(error))
+        }
+    }
+
+    private func addressErrorMessage(_ error: Error) -> String {
+        if error is AddressSearchError { return error.localizedDescription }
+        if let error = error as? MKError, error.code == .serverFailure || error.code == .loadingThrottled {
+            return "Apple Maps couldn't search right now. Try again in a moment."
+        }
+        if (error as NSError).domain == NSURLErrorDomain {
+            return "Searching for an address needs an internet connection."
+        }
+        return "Couldn't search for that address. Try again in a moment."
+    }
+
     // MARK: - Search
 
-    /// Searches around the user (region nil) or inside a map region.
-    private func search(in region: MKCoordinateRegion?) async {
-        nearby = .loading
+    /// Searches around the user, a searched place, or from the middle of the map.
+    private func search(_ origin: Origin) async {
+        // Following the map keeps the old list up until the new one is ready.
+        if case .region = origin {} else { nearby = .loading }
+        searchID += 1
+        let id = searchID
         do {
             let api = try ParkingAPI.fromSettings()
             let center: CLLocationCoordinate2D
             var radius: Int?
-            if let region {
-                let halfDiagonal = region.halfDiagonalMeters
-                guard halfDiagonal <= Self.maxRadiusMeters * 2 else {
-                    nearby = .failed("Zoom in to a few blocks to search this area.")
-                    mapMoved = true
-                    return
-                }
+            switch origin {
+            case .region(let region):
+                // Zoomed far out, this still finds the closest spots to the middle.
                 center = region.center
-                radius = Int(min(max(halfDiagonal, 50), Self.maxRadiusMeters))
-            } else {
+                radius = Int(min(max(region.halfDiagonalMeters, 50), Self.maxRadiusMeters))
+            case .place(let place):
+                center = place.coordinate
+                startNote = nil
+                // Show the place while the results load.
+                moveMap(to: MKCoordinateRegion(center: center, latitudinalMeters: 500, longitudinalMeters: 500))
+            case .me:
                 let start = await startingPoint()
                 center = start.center
                 startNote = start.note
@@ -254,23 +346,31 @@ struct FindParkingView: View {
                 limit: 10,
                 radiusMeters: radius
             )
+            guard id == searchID else { return }
             SpotStore.shared.save(answer.results)
             nearby = .loaded(answer)
-            lastQueryRegion = region
-            searchedRegion = region ?? visibleRegion
-            mapMoved = false
-            if region == nil, !answer.results.isEmpty {
-                // Fit the user and the results only. (.automatic would also fit the
-                // street-color lines, which zoom the map out as they load.)
-                let points = [center] + answer.results.flatMap { spot in
+            lastOrigin = origin
+            followMap = true
+            if case .region = origin {
+                // The map is already where the user put it.
+            } else if !answer.results.isEmpty {
+                // Fit the starting point and the results only. (.automatic would also
+                // fit the street-color lines, which zoom the map out as they load.)
+                var points = [center] + answer.results.flatMap { spot in
                     [spot.zoneCenter] + (spot.path ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
                 }
-                fittingResults = true
+                if case .place = origin {
+                    // Keep the searched place in the middle: mirror every point around it.
+                    points += points.map {
+                        CLLocationCoordinate2D(latitude: 2 * center.latitude - $0.latitude,
+                                               longitude: 2 * center.longitude - $0.longitude)
+                    }
+                }
                 moveMap(to: MKCoordinateRegion.fitting(points, minimumMeters: 300))
-                try? await Task.sleep(for: .seconds(1.5))
-                fittingResults = false
             }
         } catch {
+            guard id == searchID else { return }
+            followMap = true
             nearby = .failed(errorMessage(error))
         }
     }
@@ -330,6 +430,14 @@ private struct FilterChip: View {
     }
 }
 
+extension CLLocationCoordinate2D {
+    /// Distance in meters.
+    func distance(to other: CLLocationCoordinate2D) -> Double {
+        CLLocation(latitude: latitude, longitude: longitude)
+            .distance(from: CLLocation(latitude: other.latitude, longitude: other.longitude))
+    }
+}
+
 extension MKCoordinateRegion {
     func contains(_ c: CLLocationCoordinate2D) -> Bool {
         abs(c.latitude - center.latitude) <= span.latitudeDelta / 2
@@ -343,13 +451,5 @@ extension MKCoordinateRegion {
             longitude: center.longitude + span.longitudeDelta / 2
         )
         return CLLocation(latitude: center.latitude, longitude: center.longitude).distance(from: corner)
-    }
-
-    /// True when the regions overlap closely enough that searching again is pointless.
-    func isClose(to other: MKCoordinateRegion) -> Bool {
-        let shift = CLLocation(latitude: center.latitude, longitude: center.longitude)
-            .distance(from: CLLocation(latitude: other.center.latitude, longitude: other.center.longitude))
-        let zoom = span.latitudeDelta / max(other.span.latitudeDelta, .ulpOfOne)
-        return shift < other.halfDiagonalMeters * 0.25 && zoom > 0.7 && zoom < 1.4
     }
 }
