@@ -461,8 +461,14 @@ struct CurbMapView: UIViewRepresentable {
         if let focus {
             map.setRegion(focus.region, animated: false)
             context.coordinator.focusID = focus.id
+        } else if interactive {
+            // Until the first search says where to look, show downtown rather
+            // than wherever MapKit starts (often a whole country).
+            map.setRegion(SeattleArea.downtownRegion, animated: false)
         }
         if interactive {
+            // The app only has Seattle's data, so keep the map there.
+            map.cameraBoundary = MKMapView.CameraBoundary(coordinateRegion: SeattleArea.mapBounds)
             map.cameraZoomRange = MKMapView.CameraZoomRange(
                 minCenterCoordinateDistance: CurbLine.minCameraDistance,
                 maxCenterCoordinateDistance: CurbLine.maxCameraDistance)

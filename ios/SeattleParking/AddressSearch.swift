@@ -57,19 +57,11 @@ final class AddressSearch: NSObject, MKLocalSearchCompleterDelegate {
         suggestions = []
     }
 
-    /// Roughly the city limits, padded a little.
-    nonisolated static let seattleBounds = (minLat: 47.48, maxLat: 47.75, minLon: -122.46, maxLon: -122.22)
-
-    nonisolated static var seattleRegion: MKCoordinateRegion {
-        let b = seattleBounds
-        return MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: (b.minLat + b.maxLat) / 2, longitude: (b.minLon + b.maxLon) / 2),
-            span: MKCoordinateSpan(latitudeDelta: b.maxLat - b.minLat, longitudeDelta: b.maxLon - b.minLon))
-    }
+    /// The city limits plus a small buffer, the same area the map is kept in.
+    nonisolated static var seattleRegion: MKCoordinateRegion { SeattleArea.region }
 
     nonisolated static func isInSeattle(_ c: CLLocationCoordinate2D) -> Bool {
-        let b = seattleBounds
-        return (b.minLat...b.maxLat).contains(c.latitude) && (b.minLon...b.maxLon).contains(c.longitude)
+        SeattleArea.contains(c)
     }
 
     override init() {
