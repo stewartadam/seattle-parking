@@ -97,8 +97,10 @@ struct CurbDetail: View {
                     Button(action: onClose) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title)
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.secondary)
+                            // A solid dark circle with a cut-out X, so it stands
+                            // out in light and dark mode.
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(Color(.systemBackground), Color(.label).opacity(0.65))
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.borderless)
