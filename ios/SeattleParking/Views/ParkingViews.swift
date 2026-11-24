@@ -2,6 +2,36 @@ import CoreLocation
 import MapKit
 import SwiftUI
 
+/// A street side described in three lines, plus the weekly schedule when
+/// there is one:
+///
+///     NW 64th St - South side, 50ft
+///     Between 15th Ave NW and 17th Ave NW
+///     free, no posted time limit
+struct StreetDescription: View {
+    let label: String
+    let side: String?
+    var distanceMeters: Int? = nil
+    let summary: String
+    var schedule: String? = nil
+    var headingFont: Font = .subheadline.bold()
+
+    var body: some View {
+        let parts = ParkingText.splitStreetLabel(label)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(ParkingText.streetHeading(name: parts.name, side: side, distanceMeters: distanceMeters))
+                .font(headingFont)
+            if let between = parts.between {
+                Text(between).font(.subheadline).foregroundStyle(.secondary)
+            }
+            Text(summary).font(.subheadline)
+            if let schedule {
+                Text(schedule).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 /// One side of the street and whether you can park there now.
 struct BlockfaceRow: View {
     let blockface: Blockface
@@ -12,13 +42,8 @@ struct BlockfaceRow: View {
                 .font(.title2)
                 .foregroundStyle(blockface.canParkNow ? .green : .red)
                 .accessibilityLabel(blockface.canParkNow ? "You can park" : "No parking")
-            VStack(alignment: .leading, spacing: 2) {
-                Text(blockface.side.map { "\($0.capitalized) side" } ?? "This side").font(.subheadline.bold())
-                Text(blockface.summary).font(.subheadline)
-                if let schedule = blockface.schedule {
-                    Text(schedule).font(.caption).foregroundStyle(.secondary)
-                }
-            }
+            StreetDescription(label: blockface.displayStreet, side: blockface.side,
+                              summary: blockface.summary, schedule: blockface.schedule)
         }
         .padding(.vertical, 2)
     }
@@ -36,14 +61,8 @@ struct SpotRow: View {
                 .fill(Color((kind ?? spot.kind(filters: CurbFilters())).color))
                 .frame(width: 5, height: 36)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(spot.displayStreet).font(.subheadline.bold())
-                Text(spot.summary).font(.subheadline)
-                if let schedule = spot.schedule {
-                    Text(schedule).font(.caption).foregroundStyle(.secondary)
-                }
-                Text(spot.distanceLabel).font(.caption).foregroundStyle(.secondary)
-            }
+            StreetDescription(label: spot.displayStreet, side: spot.side, distanceMeters: spot.distanceMeters,
+                              summary: spot.summary, schedule: spot.schedule)
             // Separators start under the street name, not under the number.
             .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
             Spacer(minLength: 8)
@@ -84,12 +103,9 @@ struct CurbDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(curb.streetLabel ?? curb.street).font(.headline)
-                        Text(curb.side.map { "\($0.capitalized) side" } ?? "This side")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    // The schedule goes under the color key below.
+                    StreetDescription(label: curb.streetLabel ?? curb.street, side: curb.side,
+                                      summary: curb.summary, headingFont: .headline)
                     Spacer(minLength: 8)
                     if curb.canParkNow {
                         DirectionsButton(url: curb.drivingDirectionsURL, street: curb.street)
@@ -113,7 +129,6 @@ struct CurbDetail: View {
                         .font(.subheadline.weight(.semibold))
                 }
                 .accessibilityElement(children: .combine)
-                Text(curb.summary)
                 if let schedule = curb.schedule {
                     Text(schedule).font(.subheadline).foregroundStyle(.secondary)
                 }

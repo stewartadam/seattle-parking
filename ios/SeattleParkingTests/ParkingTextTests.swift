@@ -19,6 +19,19 @@ final class ParkingTextTests: XCTestCase {
                        "Broadway E between E. Olive Way and E. Thomas St")
     }
 
+    func testStreetDescriptionLines() {
+        let parts = ParkingText.splitStreetLabel("NW 64th St between 15th Ave NW and 17th Ave NW")
+        XCTAssertEqual(parts.name, "NW 64th St")
+        XCTAssertEqual(parts.between, "Between 15th Ave NW and 17th Ave NW")
+        XCTAssertEqual(ParkingText.streetHeading(name: parts.name, side: "south", distanceMeters: 15),
+                       "NW 64th St - South side, 50ft")
+        XCTAssertEqual(ParkingText.streetHeading(name: parts.name, side: nil), "NW 64th St - This side")
+        XCTAssertEqual(ParkingText.shortDistance(800), "0.5mi")
+        let unsplit = ParkingText.splitStreetLabel("Unnamed block")
+        XCTAssertEqual(unsplit.name, "Unnamed block")
+        XCTAssertNil(unsplit.between)
+    }
+
     func testDistanceUsesFeetThenMiles() {
         XCTAssertEqual(ParkingText.distance(10), "right here")
         XCTAssertEqual(ParkingText.distance(90), "about 300 feet")

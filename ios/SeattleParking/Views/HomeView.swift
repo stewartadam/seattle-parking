@@ -9,6 +9,8 @@ struct HomeView: View {
     /// You're outside Seattle, where the app has no data.
     @State private var outsideSeattle = false
     @State private var locationManager = CLLocationManager()
+    /// Set by tapping the map, to open Find Parking.
+    @State private var showFindParking = false
 
     var body: some View {
         NavigationStack {
@@ -24,6 +26,7 @@ struct HomeView: View {
                         .accessibilityLabel("Settings")
                 }
             }
+            .navigationDestination(isPresented: $showFindParking) { FindParkingView() }
             .refreshable { await loadHere() }
             .sheet(isPresented: $showSettings, onDismiss: { Task { await loadHere() } }) {
                 SettingsView()
@@ -66,6 +69,14 @@ struct HomeView: View {
                     if answer.blockfaces.contains(where: { $0.curbCoordinates != nil }) {
                         HereMap(blockfaces: answer.blockfaces)
                             .frame(height: 150)
+                            // The map doesn't pan here; a tap opens the full
+                            // Find Parking map instead.
+                            .overlay { Color.clear.contentShape(Rectangle()).onTapGesture { showFindParking = true } }
+                            .accessibilityElement()
+                            .accessibilityLabel("Map of the streets around you")
+                            .accessibilityHint("Opens Find parking nearby")
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { showFindParking = true }
                             .listRowInsets(EdgeInsets())
                     }
                     ForEach(answer.blockfaces, id: \.self) { BlockfaceRow(blockface: $0) }
@@ -93,8 +104,8 @@ struct HomeView: View {
     }
 
     private var hereTitle: String {
-        if case .loaded(let answer) = here, let street = answer.blockfaces.first?.displayStreet { return street }
-        return "Right here"
+        // Each row below names the street and block.
+        "Right here"
     }
 
     private var findSection: some View {

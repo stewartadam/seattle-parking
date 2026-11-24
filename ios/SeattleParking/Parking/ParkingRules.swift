@@ -313,6 +313,31 @@ enum ParkingText {
         rate == rate.rounded() ? "$\(Int(rate))" : "$\(String(format: "%.2f", rate))"
     }
 
+    /// Splits a display label into the street and the block it covers:
+    /// "NW 64th St between 15th Ave NW and 17th Ave NW" ->
+    /// ("NW 64th St", "Between 15th Ave NW and 17th Ave NW").
+    static func splitStreetLabel(_ label: String) -> (name: String, between: String?) {
+        guard let range = label.range(of: " between ") else { return (label, nil) }
+        let name = String(label[..<range.lowerBound])
+        let rest = String(label[range.upperBound...])
+        guard !name.isEmpty, !rest.isEmpty else { return (label, nil) }
+        return (name, "Between " + rest)
+    }
+
+    /// "50ft", "0.4mi": a compact distance for list rows.
+    static func shortDistance(_ meters: Double) -> String {
+        let feet = meters * 3.28084
+        if feet < 1000 { return "\(max(50, Int((feet / 50).rounded()) * 50))ft" }
+        return "\(String(format: "%.1f", feet / 5280))mi"
+    }
+
+    /// The first line of a street description: "NW 64th St - South side, 50ft".
+    static func streetHeading(name: String, side: String?, distanceMeters: Int? = nil) -> String {
+        var line = name + " - " + (side.map { "\(capitalized($0)) side" } ?? "This side")
+        if let distanceMeters { line += ", " + shortDistance(Double(distanceMeters)) }
+        return line
+    }
+
     static func capitalized(_ s: String) -> String { s.isEmpty ? s : s.prefix(1).uppercased() + s.dropFirst() }
 }
 
