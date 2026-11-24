@@ -63,8 +63,10 @@ struct ParkingEngine: Sendable {
         }
 
         var speech: [String] = []
+        var brief = ""
         if here.isEmpty {
             speech.append("I couldn't find any city parking data for the street you're on. You may be off-street or outside Seattle.")
+            brief = speech[0]
         } else {
             var streets: [String] = []
             var byStreet: [String: [BlockfaceStatus]] = [:]
@@ -73,6 +75,7 @@ struct ParkingEngine: Sendable {
                 byStreet[h.status.street, default: []].append(h.status)
             }
             speech.append(streets.count == 1 ? "You're on \(streets[0])." : "You're near \(streets.joined(separator: ", and ")).")
+            brief = Self.briefHere(street: streets[0], sides: byStreet[streets[0]]!)
             for street in streets {
                 let sides = byStreet[street]!
                 let prefix = streets.count > 1 ? "On \(street), " : ""
@@ -94,6 +97,7 @@ struct ParkingEngine: Sendable {
 
         return HereResponse(
             speech: speech.joined(separator: " "),
+            brief: brief,
             blockfaces: here.map { h in
                 let s = h.status
                 return Blockface(
@@ -105,6 +109,18 @@ struct ParkingEngine: Sendable {
             },
             rpzZone: rpz
         )
+    }
+
+    /// What Siri says for "can I park here", kept short for someone
+    /// driving: the closest street only, without its cross streets.
+    /// "On 14th Avenue East: east side, free, no posted time limit; west side, no parking."
+    static func briefHere(street: String, sides: [BlockfaceStatus]) -> String {
+        let name = ParkingText.spokenStreet(street)
+        if sides.count == 1 || Set(sides.map(\.summary)).count == 1 {
+            return "On \(name): \(sides[0].summary)."
+        }
+        let each = sides.map { "\($0.side.map { "\($0) side" } ?? "one side"), \($0.summary)" }
+        return "On \(name): \(each.joined(separator: "; "))."
     }
 
     // MARK: area
@@ -130,9 +146,12 @@ struct ParkingEngine: Sendable {
 
     // MARK: nearby
 
+    /// `minMinutes` or `until` (whichever is given) is how long you're
+    /// staying; a stay past midnight is checked against the next day's rules too.
     func nearby(_ origin: Coordinate, radiusMeters: Double = defaultSearchRadius, limit: Int = 3, minMinutes: Int? = nil,
-                freeOnly: Bool = false, permitZone: String?, date: Date = Date()) async throws -> NearbyResponse {
+                until: Date? = nil, freeOnly: Bool = false, permitZone: String?, date: Date = Date()) async throws -> NearbyResponse {
         let now = SeattleTime(date)
+        let stayEnd = until ?? minMinutes.flatMap { $0 > 0 ? date.addingTimeInterval(Double($0) * 60) : nil }
         let radius = min(max(radiusMeters, 50), Self.maxSearchRadius)
         async let nearbyTask = source.blockfaces(near: origin, radiusMeters: radius)
         let rpzHours = await source.rpzHours()
@@ -144,7 +163,9 @@ struct ParkingEngine: Sendable {
             let r = BlockfaceStatus(b.rules, at: now, permitZone: permitZone, rpzHours: rpzHours)
             if !r.canParkNow { continue }
             if freeOnly && !r.freeNow { continue }
-            if let minMinutes, minMinutes != 0, let limit = r.timeLimitMinutes, limit < minMinutes { continue }
+            if let stayEnd, !Self.fitsStay(b.rules, from: date, until: stayEnd, permitZone: permitZone, rpzHours: rpzHours) {
+                continue
+            }
             // Both sides of a block usually share rules; keep the closer one.
             guard seen.insert("\(r.street)|\(r.summary)").inserted else { continue }
             let lat = String(format: "%.6f", b.point.lat)
@@ -188,5 +209,28 @@ struct ParkingEngine: Sendable {
             }
         }
         return NearbyResponse(speech: speech.joined(separator: " "), results: results)
+    }
+
+    /// The longest stay a search checks, so a far-off "until" stays cheap.
+    static let maxStayDays = 3
+
+    /// Whether you can stay on a block from `start` until `end`. The rules
+    /// are worked out one day at a time, so each day the stay covers is
+    /// checked from its first minute (from midnight after the first day).
+    static func fitsStay(_ rules: BlockfaceRules, from start: Date, until end: Date, permitZone: String?,
+                         rpzHours: [String: String]) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = SeattleTime.timeZone
+        let end = min(end, start.addingTimeInterval(Double(maxStayDays) * 86_400))
+        var from = start
+        while from < end {
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: from)) else { break }
+            let needed = Int((min(end, nextDay).timeIntervalSince(from) / 60).rounded(.down))
+            let status = BlockfaceStatus(rules, at: SeattleTime(from), permitZone: permitZone, rpzHours: rpzHours)
+            if !status.canParkNow { return false }
+            if let limit = status.timeLimitMinutes, limit < needed { return false }
+            from = nextDay
+        }
+        return true
     }
 }

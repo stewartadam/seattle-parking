@@ -36,6 +36,8 @@ struct RPZZone: Codable, Hashable, Sendable {
 
 struct HereResponse: Codable, Sendable {
     let speech: String
+    /// A short version for Siri: the closest street's rules, no cross streets.
+    let brief: String
     let blockfaces: [Blockface]
     let rpzZone: RPZZone?
 }

@@ -338,6 +338,26 @@ enum ParkingText {
         return line
     }
 
+    /// A street name to say out loud, without the cross streets:
+    /// "Northwest 64th Street between 15th Avenue Northwest and ..." -> "Northwest 64th Street".
+    static func spokenStreet(_ street: String) -> String {
+        street.components(separatedBy: " between ").first ?? street
+    }
+
+    /// What Siri says after a search, kept short for someone driving: only
+    /// the closest spot, its street without cross streets or side (the card
+    /// shows those), and its rules. `stay` is how the search was worded,
+    /// e.g. "for 2 hours" or "overnight".
+    /// "The closest spot is about 200 feet south, on Northwest 63rd Street: free, no posted time limit."
+    static func briefSpeech(closest spot: Spot, stay: String? = nil) -> String {
+        let street = spokenStreet(spot.street)
+        let forStay = stay.map { " \($0)" } ?? ""
+        guard let direction = spot.direction else {
+            return "You can park right here\(forStay), on \(street): \(spot.summary)."
+        }
+        return "The closest spot\(forStay) is \(distance(Double(spot.distanceMeters))) \(direction), on \(street): \(spot.summary)."
+    }
+
     static func capitalized(_ s: String) -> String { s.isEmpty ? s : s.prefix(1).uppercased() + s.dropFirst() }
 }
 
