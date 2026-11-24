@@ -73,9 +73,10 @@ extension AppIntent {
         let coordinate = try await LocationProvider.current()
         let answer = try await api.nearby(coordinate, until: end, freeOnly: freeOnly)
 
-        guard let closest = answer.results.first, let url = closest.drivingDirectionsURL else {
+        guard let closest = answer.results.first else {
             throw ParkingError.nothingNearby(answer.speech)
         }
+        let url = closest.drivingDirectionsURL
         let speech = ParkingText.briefSpeech(closest: closest, stay: stayText)
         let minutes = end.map { max(1, Int($0.timeIntervalSince(now) / 60)) }
         try await requestConfirmation(
