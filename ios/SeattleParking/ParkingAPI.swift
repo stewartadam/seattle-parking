@@ -42,10 +42,11 @@ struct ParkingAPI {
         try await run { try await $0.here(Coordinate(c), permitZone: permitZone) }
     }
 
-    func nearby(_ c: CLLocationCoordinate2D, minMinutes: Int? = nil, freeOnly: Bool = false, limit: Int = 3, radiusMeters: Int? = nil) async throws -> NearbyResponse {
+    func nearby(_ c: CLLocationCoordinate2D, minMinutes: Int? = nil, until: Date? = nil, freeOnly: Bool = false, limit: Int = 3,
+                radiusMeters: Int? = nil) async throws -> NearbyResponse {
         try await run {
             try await $0.nearby(Coordinate(c), radiusMeters: radiusMeters.map { Double($0) } ?? ParkingEngine.defaultSearchRadius,
-                                limit: limit, minMinutes: minMinutes, freeOnly: freeOnly, permitZone: permitZone)
+                                limit: limit, minMinutes: minMinutes, until: until, freeOnly: freeOnly, permitZone: permitZone)
         }
     }
 

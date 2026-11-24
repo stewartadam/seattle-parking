@@ -354,7 +354,6 @@ struct FindParkingView: View {
                 radiusMeters: radius
             )
             guard id == searchID else { return }
-            SpotStore.shared.save(answer.results)
             nearby = .loaded(answer)
             lastOrigin = origin
             followMap = true

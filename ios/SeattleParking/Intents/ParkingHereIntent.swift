@@ -13,7 +13,7 @@ struct ParkingHereIntent: AppIntent {
         let api = try ParkingAPI.fromSettings()
         let coordinate = try await LocationProvider.current()
         let answer = try await api.here(coordinate)
-        return .result(dialog: IntentDialog("\(answer.speech)"), view: HereSnippet(answer: answer))
+        return .result(dialog: IntentDialog("\(answer.brief)"), view: HereSnippet(answer: answer))
     }
 }
 

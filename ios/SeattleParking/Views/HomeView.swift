@@ -124,11 +124,14 @@ struct HomeView: View {
         Section {
             SiriPhrase(text: "Can I park here with Seattle Parking")
             SiriPhrase(text: "Find parking with Seattle Parking")
-            SiriPhrase(text: "Directions to spot 2 in Seattle Parking")
+            SiriPhrase(text: "Find parking for two hours with Seattle Parking")
+            SiriPhrase(text: "Find overnight parking with Seattle Parking")
+            SiriPhrase(text: "Find parking until a certain time with Seattle Parking")
+            SiriPhrase(text: "Find parking near a place with Seattle Parking")
         } header: {
             Text("Ask Siri").textCase(nil).font(.headline)
         } footer: {
-            Text("After finding parking, Siri offers driving directions to the closest spot.")
+            Text("Siri tells you the closest spot and offers driving directions to it. You can also say one hour, four hours or until morning. For any other time, Siri asks \u{201C}Until when?\u{201D}, and for a place, \u{201C}Near where?\u{201D}")
         }
     }
 

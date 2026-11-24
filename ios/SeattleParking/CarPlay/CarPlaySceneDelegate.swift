@@ -134,7 +134,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             )
             guard !Task.isCancelled else { return }
             lastQueryRegion = region
-            SpotStore.shared.save(answer.results)
             template?.title = "Parking"
             if answer.results.isEmpty {
                 showMessage(answer.speech)
